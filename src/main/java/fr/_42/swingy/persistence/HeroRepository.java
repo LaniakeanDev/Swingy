@@ -1,0 +1,221 @@
+package fr._42.swingy.persistence;
+
+import fr._42.swingy.model.entity.Artifact;
+import fr._42.swingy.model.entity.Hero;
+import fr._42.swingy.model.enums.ArtifactType;
+import fr._42.swingy.model.enums.HeroClass;
+
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * Persists heroes to a plain-text file. One hero per line, fields
+ * separated by '|', artifacts inlined as type:value pairs.
+ *
+ * This class has no domain logic — it only serializes and deserializes.
+ * All game rules live in the model/controller layers.
+ */
+public class HeroRepository {
+
+    private static final String FIELD_SEP      = "|";
+    private static final String ARTIFACT_SEP   = ",";
+    private static final String ARTIFACT_KV    = ":";
+    private static final int    EXPECTED_FIELDS = 8; // 7 hero fields + artifacts column
+
+    private final Path saveFile;
+
+    public HeroRepository(String fileName) {
+        this.saveFile = Paths.get(fileName).toAbsolutePath();
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  Public API                                                         */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Loads all heroes from disk. Missing file is not an error — it simply
+     * means a fresh install with no saved heroes yet.
+     */
+    public List<Hero> loadAll() {
+        if (!Files.exists(saveFile)) {
+            return new ArrayList<>();
+        }
+
+        List<Hero> heroes = new ArrayList<>();
+        try (BufferedReader reader = Files.newBufferedReader(saveFile, StandardCharsets.UTF_8)) {
+            String line;
+            int lineNumber = 0;
+            while ((line = reader.readLine()) != null) {
+                lineNumber++;
+                line = line.trim();
+                if (line.isEmpty() || line.startsWith("#")) {
+                    continue; // skip blanks and comments
+                }
+                try {
+                    heroes.add(deserialize(line));
+                } catch (RuntimeException e) {
+                    // Corrupt line: warn and skip, don't nuke the whole save file.
+                    System.err.printf(
+                        "[HeroRepository] Skipping malformed line %d in %s: %s%n",
+                        lineNumber, saveFile.getFileName(), e.getMessage()
+                    );
+                }
+            }
+        } catch (IOException e) {
+            throw new RepositoryException("Failed to read save file: " + saveFile, e);
+        }
+        return heroes;
+    }
+
+    /**
+     * Convenience: find a hero by name (case-sensitive).
+     */
+    public Optional<Hero> findByName(String name) {
+        return loadAll().stream()
+                .filter(h -> h.getName().equals(name))
+                .findFirst();
+    }
+
+    /**
+     * Overwrites the save file with the given heroes. Atomic: writes to a
+     * temp file first, then moves it into place.
+     */
+    public void saveAll(List<Hero> heroes) {
+        Path temp = saveFile.resolveSibling(saveFile.getFileName() + ".tmp");
+        try {
+            Files.createDirectories(saveFile.toAbsolutePath().getParent());
+            try (BufferedWriter writer = Files.newBufferedWriter(temp, StandardCharsets.UTF_8)) {
+                writer.write("# Swingy save file — do not edit by hand");
+                writer.newLine();
+                for (Hero hero : heroes) {
+                    writer.write(serialize(hero));
+                    writer.newLine();
+                }
+            }
+            Files.move(temp, saveFile,
+                    StandardCopyOption.REPLACE_EXISTING,
+                    StandardCopyOption.ATOMIC_MOVE);
+        } catch (IOException e) {
+            throw new RepositoryException("Failed to write save file: " + saveFile, e);
+        }
+    }
+
+    /**
+     * Appends a single hero without rewriting the rest of the file.
+     * Useful right after hero creation.
+     */
+    public void append(Hero hero) {
+        try {
+            Files.createDirectories(saveFile.toAbsolutePath().getParent());
+            boolean needsNewline = Files.exists(saveFile) && Files.size(saveFile) > 0;
+            try (BufferedWriter writer = Files.newBufferedWriter(
+                    saveFile, StandardCharsets.UTF_8,
+                    java.nio.file.StandardOpenOption.CREATE,
+                    java.nio.file.StandardOpenOption.APPEND)) {
+                if (needsNewline) writer.newLine();
+                writer.write(serialize(hero));
+            }
+        } catch (IOException e) {
+            throw new RepositoryException("Failed to append hero to " + saveFile, e);
+        }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  Serialization                                                      */
+    /* ------------------------------------------------------------------ */
+
+    private String serialize(Hero hero) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(sanitize(hero.getName())).append(FIELD_SEP);
+        sb.append(hero.getHeroClass().name()).append(FIELD_SEP);
+        sb.append(hero.getLevel()).append(FIELD_SEP);
+        sb.append(hero.getExperience()).append(FIELD_SEP);
+        sb.append(hero.getAttack()).append(FIELD_SEP);
+        sb.append(hero.getDefense()).append(FIELD_SEP);
+        sb.append(hero.getHitPoints()).append(FIELD_SEP);
+
+        List<Artifact> artifacts = hero.getArtifacts();
+        for (int i = 0; i < artifacts.size(); i++) {
+            Artifact a = artifacts.get(i);
+            sb.append(a.getType().name()).append(ARTIFACT_KV).append(a.getValue());
+            if (i < artifacts.size() - 1) sb.append(ARTIFACT_SEP);
+        }
+        return sb.toString();
+    }
+
+    private Hero deserialize(String line) {
+        String[] parts = line.split("\\" + FIELD_SEP, -1);
+        if (parts.length < EXPECTED_FIELDS) {
+            throw new IllegalArgumentException(
+                "expected " + EXPECTED_FIELDS + " fields, got " + parts.length);
+        }
+
+        String     name       = parts[0];
+        HeroClass  heroClass  = HeroClass.valueOf(parts[1]);
+        int        level      = parsePositiveInt(parts[2], "level");
+        long       experience = parseNonNegativeLong(parts[3], "experience");
+        int        attack     = parsePositiveInt(parts[4], "attack");
+        int        defense    = parsePositiveInt(parts[5], "defense");
+        int        hitPoints  = parsePositiveInt(parts[6], "hitPoints");
+        List<Artifact> artifacts = parseArtifacts(parts[7]);
+
+        return new Hero.Builder()
+                .name(name)
+                .heroClass(heroClass)
+                .level(level)
+                .experience(experience)
+                .attack(attack)
+                .defense(defense)
+                .hitPoints(hitPoints)
+                .artifacts(artifacts)
+                .build();
+    }
+
+    private List<Artifact> parseArtifacts(String field) {
+        if (field == null || field.isBlank()) {
+            return Collections.emptyList();
+        }
+        List<Artifact> artifacts = new ArrayList<>();
+        for (String token : field.split(ARTIFACT_SEP)) {
+            String[] kv = token.split(ARTIFACT_KV, 2);
+            if (kv.length != 2) {
+                throw new IllegalArgumentException("bad artifact token: '" + token + "'");
+            }
+            ArtifactType type = ArtifactType.valueOf(kv[0]);
+            int value = Integer.parseInt(kv[1]);
+            artifacts.add(new Artifact(type, value));
+        }
+        return artifacts;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  Helpers                                                            */
+    /* ------------------------------------------------------------------ */
+
+    /** Prevent delimiter injection — a name with '|' would corrupt the format. */
+    private String sanitize(String name) {
+        return name.replace(FIELD_SEP, "_").replace("\n", " ").replace("\r", " ");
+    }
+
+    private int parsePositiveInt(String s, String field) {
+        int v = Integer.parseInt(s);
+        if (v <= 0) throw new IllegalArgumentException(field + " must be > 0, got " + v);
+        return v;
+    }
+
+    private long parseNonNegativeLong(String s, String field) {
+        long v = Long.parseLong(s);
+        if (v < 0) throw new IllegalArgumentException(field + " must be >= 0, got " + v);
+        return v;
+    }
+}
