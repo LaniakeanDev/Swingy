@@ -1,9 +1,14 @@
 package fr._42.swingy.controller;
-
+import java.util.Random;
 import java.util.List;
 
+import fr._42.swingy.model.entity.Artifact;
+import fr._42.swingy.model.entity.ArtifactPool;
 import fr._42.swingy.model.entity.Hero;
+import fr._42.swingy.model.entity.Villain;
 import fr._42.swingy.model.enums.EncounterResult;
+import fr._42.swingy.model.enums.HeroClass;
+// import fr._42.swingy.model.enums.ArtifactType;
 import fr._42.swingy.model.enums.Direction;
 import fr._42.swingy.model.map.GameMap;
 import fr._42.swingy.model.map.Position;
@@ -19,6 +24,7 @@ public class GameController {
     private GameMap map;
     private Hero currentHero;
     private List<Hero> heroList;
+    private final Random random = new Random();
 
     public GameController(View view, Validator validator, HeroRepository repository) {
         this.view = view;
@@ -30,12 +36,19 @@ public class GameController {
         heroList = repository.loadAll();
         try {
             currentHero = mainMenu();
-            map = new GameMap(mapSizeFor(currentHero.getLevel()));
+            int size = mapSizeFor(currentHero.getLevel());
+            map = new GameMap(size);
+            currentHero.setPosition(map.center());
             map.placeHero(currentHero, map.center());
+            map.generateVillains(villainCountFor(size), currentHero.getLevel());
             gameLoop();
         } finally {
             saveAndExit();
         }
+    }
+
+    private int villainCountFor(int mapSize) {
+        return Math.max(2, mapSize / 3);
     }
 
     private void gameLoop() {
@@ -75,26 +88,40 @@ public class GameController {
     }
 
     private void handleMove(Direction dir) {
-        Position nextPos = map.getNextPosition(currentHero.getPosition(), dir);
-        if (map.isInside(nextPos)) {
-            currentHero.setPosition(nextPos);
-            if (map.hasVillainAt(nextPos)) {
-                // Handle battle    
-                EncounterResult result = handleEncounter(currentHero, map.getVillainAt(nextPos));
-                if (result == EncounterResult.HERO_WON) {
-                    view.displayMessage("You defeated the villain!");
-                    map.removeVillain(map.getVillainAt(nextPos));
-                } else if (result == EncounterResult.HERO_LOST) {
-                    view.displayMessage("You were defeated by the villain. Game over.");
+        Position current = currentHero.getPosition();
+        Position next    = map.getNextPosition(current, dir);
+
+        if (map.isBorder(next)) {
+            view.displayMessage("You reached the border — you win!");
+            saveAndExit();
+            System.exit(0);
+        }
+
+        if (!map.isInside(next)) {
+            view.displayError("You can't leave the map.");
+            return;
+        }
+
+        Villain villain = map.getVillainAt(next);
+        if (villain != null) {
+            EncounterResult result = handleEncounter(currentHero, villain);
+            switch (result) {
+                case HERO_WON -> {
+                    view.displayMessage("You defeated " + villain.getName() + "!");
+                    map.removeVillain(villain);
+                    currentHero.setPosition(next);
+                }
+                case HERO_FLED -> view.displayMessage(
+                    "You fled. The villain still blocks the path.");
+                case HERO_LOST -> {
+                    view.displayMessage("You were defeated. Game over.");
                     saveAndExit();
                     System.exit(0);
                 }
-                else if (result == EncounterResult.HERO_FLED) {
-                    view.displayMessage("You fled from the villain.");
-                    // Optionally, move the hero back to the previous position
-                }
             }
+            return;
         }
+        currentHero.setPosition(next);
     }
 
     private Hero mainMenu() {
@@ -123,14 +150,105 @@ public class GameController {
             view.displayError("Invalid hero class.");
             return createNewHero();
         }
-        Hero newHero = new Hero.HeroBuilder(name, className).build();
+        HeroClass heroClass = HeroClass.fromString(className);
+        Hero newHero = new Hero.HeroBuilder()
+            .name(name)
+            .heroClass(heroClass)
+            .build();
         heroList.add(newHero);
         return newHero;
     }
 
-    private EncounterResult handleEncounter(Hero hero, Object villain) {
-        // Placeholder for encounter logic
-        // For now, let's assume the hero always wins
-        return EncounterResult.HERO_WON;
+    private EncounterResult handleEncounter(Hero hero, Villain villain) {
+        view.displayMessage(String.format(
+            "A %s (power %d) blocks your path!", villain.getName(), villain.getAttack()));
+
+        String choice = view.askInput("Fight or Run? [f/r]: ").trim().toLowerCase();
+        if (choice.startsWith("r")) {
+            if (random.nextBoolean()) {
+                return EncounterResult.HERO_FLED;
+            }
+            view.displayMessage("You failed to escape — you must fight!");
+        }
+
+        return simulateBattle(hero, villain);
+    }
+
+    /**
+     * Turn-based duel. Damage = max(1, attack - defense/2) with a
+     * ±20% luck multiplier. Hero strikes first.
+     */
+    private EncounterResult simulateBattle(Hero hero, Villain villain) {
+        int heroHp    = hero.getHitPoints();
+        int villainHp = villain.getHitPoints();
+
+        view.displayMessage(String.format(
+            "Battle begins! Hero %d HP vs Villain %d HP", heroHp, villainHp));
+
+        boolean heroTurn = true;
+        while (heroHp > 0 && villainHp > 0) {
+            if (heroTurn) {
+                int dmg = computeDamage(hero.getAttack(), villain.getDefense());
+                villainHp -= dmg;
+                view.displayMessage(String.format(
+                    "  You hit for %d. Villain HP: %d", dmg, Math.max(0, villainHp)));
+            } else {
+                int dmg = computeDamage(villain.getAttack(), hero.getDefense());
+                heroHp -= dmg;
+                view.displayMessage(String.format(
+                    "  Villain hits for %d. Your HP: %d", dmg, Math.max(0, heroHp)));
+            }
+            heroTurn = !heroTurn;
+        }
+
+        if (heroHp > 0) {
+            hero.takeDamage(hero.getHitPoints() - heroHp);
+            applyVictoryRewards(hero, villain);
+            return EncounterResult.HERO_WON;
+        }
+
+        hero.takeDamage(hero.getHitPoints());
+        return EncounterResult.HERO_LOST;
+    }
+
+    /** damage = max(1, attack - defense/2) * random[0.8, 1.2) */
+    private int computeDamage(int attack, int defense) {
+        int base = Math.max(1, attack - defense / 2);
+        double luck = 0.8 + random.nextDouble() * 0.4;
+        return Math.max(1, (int) Math.round(base * luck));
+    }
+
+    /** XP = power * 100; 40% chance of an artifact scaled to villain power. */
+    private void applyVictoryRewards(Hero hero, Villain villain) {
+        // --- XP ---
+        long xp = villain.getAttack() * 100L;
+        hero.gainExperience(xp);
+        view.displayMessage(String.format(
+            "You gain %d XP. (Level %d, %d XP to next)",
+            xp, hero.getLevel(), hero.experienceToNextLevel()));
+
+        // --- Artifact drop ---
+        if (random.nextDouble() >= 0.60) {
+            view.displayMessage("No artifact dropped.");
+            return;
+        }
+
+        Artifact artifact = ArtifactPool.rollForPower(random, villain.getAttack());
+        view.displayMessage(String.format(
+            "The villain dropped: %s (+%d %s).",
+            artifact.getName(),
+            artifact.getValue(),
+            artifact.getType().displayName().toLowerCase()));
+
+        String keep = view.askInput("Keep it? [y/n]: ").trim().toLowerCase();
+        if (keep.startsWith("y")) {
+            if (hero.equipArtifact(artifact)) {
+                view.displayMessage("Equipped " + artifact.getName() + ".");
+            } else {
+                view.displayMessage("Your class can't use that artifact. Discarded.");
+            }
+        } else {
+            view.displayMessage("You leave it behind.");
+        }
     }
 }

@@ -3,7 +3,7 @@ package fr._42.swingy.model.enums;
 public enum HeroClass {
     CULTURE_CITIZEN(1, 2, 3),
     CONTACT_AGENT(1, 2, 3),
-    SPECIAL_CIRCUMSTANCES_AGENT(1, 2, 3),
+    SC_AGENT(1, 2, 3),
     CULTURE_DRONE_CIVILIAN(1, 2, 3),
     CULTURE_DRONE_CONTACT(1, 2, 3),
     CONTRACTOR_AGENT(1, 2, 3),
@@ -27,5 +27,14 @@ public enum HeroClass {
     }
     public int getBaseHitPoints() {
         return this.baseHitPoints;
+    }
+
+    public static HeroClass fromString(String className) {
+        for (HeroClass heroClass : HeroClass.values()) {
+            if (heroClass.name().equalsIgnoreCase(className)) {
+                return heroClass;
+            }
+        }
+        throw new IllegalArgumentException("Invalid hero class: " + className);
     }
 }

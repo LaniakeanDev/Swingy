@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import fr._42.swingy.model.map.Position;
-
+import fr._42.swingy.model.enums.ArtifactType;
 import fr._42.swingy.model.enums.HeroClass;
 
 
@@ -48,7 +48,7 @@ public class Hero {
         int base = heroClass.getBaseAttack();
         int levelBonus = (level - 1) * 2;
         int artifactBonus = artifacts.stream()
-                .filter(a -> a.getSlot() == ArtifactSlot.WEAPON)
+                .filter(a -> a.getType() == ArtifactType.WEAPON)
                 .mapToInt(Artifact::getBonus)
                 .sum();
         return base + levelBonus + artifactBonus;
@@ -59,7 +59,7 @@ public class Hero {
         int base = heroClass.getBaseDefense();
         int levelBonus = (level - 1);
         int artifactBonus = artifacts.stream()
-                .filter(a -> a.getSlot() == ArtifactSlot.ARMOR)
+                .filter(a -> a.getType() == ArtifactType.ARMOR)
                 .mapToInt(Artifact::getBonus)
                 .sum();
         return base + levelBonus + artifactBonus;
@@ -70,7 +70,7 @@ public class Hero {
         int base = heroClass.getBaseHitPoints();
         int levelBonus = (level - 1) * 5;
         int artifactBonus = artifacts.stream()
-                .filter(a -> a.getSlot() == ArtifactSlot.HELM)
+                .filter(a -> a.getType() == ArtifactType.HELM)
                 .mapToInt(Artifact::getBonus)
                 .sum();
         return base + levelBonus + artifactBonus;
@@ -137,5 +137,42 @@ public class Hero {
         public Hero build() {
             return new Hero(this);
         }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  Other utilities                                          */
+    /* ------------------------------------------------------------------ */
+
+    public void takeDamage(int dmg) {
+        hitPoints -= dmg;
+    }
+
+    public void gainExperience(long xp) {
+        experience += xp;
+        if (experience >= experienceToNextLevel()) {
+            levelUp();
+        }
+    }
+
+    public int experienceToNextLevel() {
+        return level * 100;
+    }
+
+    private void levelUp() {
+        level += 1;
+    }
+
+    public boolean equipArtifact(Artifact artifact) {
+        if (artifact.getType() == ArtifactType.WEAPON) {
+            artifacts.add(artifact);
+            return true;
+        } else if (artifact.getType() == ArtifactType.ARMOR) {
+            artifacts.add(artifact);
+            return true;
+        } else if (artifact.getType() == ArtifactType.HELM) {
+            artifacts.add(artifact);
+            return true;
+        }
+        return false;
     }
 }

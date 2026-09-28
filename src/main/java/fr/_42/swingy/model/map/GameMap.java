@@ -2,6 +2,7 @@ package fr._42.swingy.model.map;
 
 import fr._42.swingy.model.entity.Hero;
 import fr._42.swingy.model.entity.Villain;
+import fr._42.swingy.model.entity.VillainPool;
 import fr._42.swingy.model.enums.Direction;
 
 import java.util.ArrayList;
@@ -137,17 +138,21 @@ public class GameMap {
     /**
      * Scatters {@code count} villains on random empty cells.
      * The hero's current cell is always left free.
+     *
+     * <p>Villain strength is chosen by {@link VillainPool#rollForHeroLevel},
+     * so a level-1 hero never meets a Demon Prince and a level-7 hero
+     * isn't bored by Giant Rats.</p>
+     *
+     * @param count     how many villains to place (stops early if the board fills)
+     * @param heroLevel the current hero's level — drives tier selection
      */
-    public void generateVillains(int count) {
+    public void generateVillains(int count, int heroLevel) {
         for (int i = 0; i < count; i++) {
             Position p = randomEmptyPosition();
             if (p == null) {
                 return;                     // board is full; stop early
             }
-            Villain v = new Villain.VillainBuilder()
-                    .name("Villain-" + i)
-                    .power(1 + random.nextInt(5))
-                    .build();
+            Villain v = VillainPool.rollForHeroLevel(random, heroLevel, p);
             placeVillain(v, p);
         }
     }
