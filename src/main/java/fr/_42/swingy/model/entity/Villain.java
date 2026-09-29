@@ -9,9 +9,11 @@ public class Villain {
     private int defense;
     private Position position;
 
-    public Villain(String name, int hitPoints, Position position) {
+    public Villain(String name, int hitPoints, int attack, int defense, Position position) {
         this.name = name;
         this.hitPoints = hitPoints;
+        this.attack = attack;
+        this.defense = defense;
         this.position = position;
     }
 
@@ -35,20 +37,7 @@ public class Villain {
         return position;
     }
 
-    public void setHitPoints(int hitPoints) {
-        this.hitPoints = hitPoints;
+    public void takeDamage(int dmg) {
+        hitPoints = Math.max(0, hitPoints - dmg);
     }
-
-    public void setPosition(Position position) {
-        this.position = position;
-    }
-
-    public void setAttack(int attack) {
-        this.attack = attack;
-    }
-
-    public void setDefense(int defense) {
-        this.defense = defense;
-    }
-    
 }

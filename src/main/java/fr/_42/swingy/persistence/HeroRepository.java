@@ -16,7 +16,6 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 
 /**
  * Persists heroes to a plain-text file. One hero per line, fields
@@ -30,7 +29,7 @@ public class HeroRepository {
     private static final String FIELD_SEP      = "|";
     private static final String ARTIFACT_SEP   = ",";
     private static final String ARTIFACT_KV    = ":";
-    private static final int    EXPECTED_FIELDS = 8; // 7 hero fields + artifacts column
+    private static final int    EXPECTED_FIELDS = 6; // 5 hero fields + artifacts column
 
     private final Path saveFile;
 
@@ -78,15 +77,6 @@ public class HeroRepository {
     }
 
     /**
-     * Convenience: find a hero by name (case-sensitive).
-     */
-    public Optional<Hero> findByName(String name) {
-        return loadAll().stream()
-                .filter(h -> h.getName().equals(name))
-                .findFirst();
-    }
-
-    /**
      * Overwrites the save file with the given heroes. Atomic: writes to a
      * temp file first, then moves it into place.
      */
@@ -110,26 +100,6 @@ public class HeroRepository {
         }
     }
 
-    /**
-     * Appends a single hero without rewriting the rest of the file.
-     * Useful right after hero creation.
-     */
-    public void append(Hero hero) {
-        try {
-            Files.createDirectories(saveFile.toAbsolutePath().getParent());
-            boolean needsNewline = Files.exists(saveFile) && Files.size(saveFile) > 0;
-            try (BufferedWriter writer = Files.newBufferedWriter(
-                    saveFile, StandardCharsets.UTF_8,
-                    java.nio.file.StandardOpenOption.CREATE,
-                    java.nio.file.StandardOpenOption.APPEND)) {
-                if (needsNewline) writer.newLine();
-                writer.write(serialize(hero));
-            }
-        } catch (IOException e) {
-            throw new RepositoryException("Failed to append hero to " + saveFile, e);
-        }
-    }
-
     /* ------------------------------------------------------------------ */
     /*  Serialization                                                      */
     /* ------------------------------------------------------------------ */
@@ -140,9 +110,7 @@ public class HeroRepository {
         sb.append(hero.getHeroClass().name()).append(FIELD_SEP);
         sb.append(hero.getLevel()).append(FIELD_SEP);
         sb.append(hero.getExperience()).append(FIELD_SEP);
-        sb.append(hero.getAttack()).append(FIELD_SEP);
-        sb.append(hero.getDefense()).append(FIELD_SEP);
-        sb.append(hero.getHitPoints()).append(FIELD_SEP);
+        sb.append(hero.getCurrentHitPoints()).append(FIELD_SEP);
 
         List<Artifact> artifacts = hero.getArtifacts();
         for (int i = 0; i < artifacts.size(); i++) {
@@ -170,16 +138,15 @@ public class HeroRepository {
         HeroClass  heroClass  = HeroClass.valueOf(parts[1]);
         int        level      = parsePositiveInt(parts[2], "level");
         long       experience = parseNonNegativeLong(parts[3], "experience");
-        int        attack     = parsePositiveInt(parts[4], "attack");
-        int        defense    = parsePositiveInt(parts[5], "defense");
-        int        hitPoints  = parsePositiveInt(parts[6], "hitPoints");
-        List<Artifact> artifacts = parseArtifacts(parts[7]);
+        int        currentHp  = parseNonNegativeInt(parts[4], "hitPoints");   // ← new
+        List<Artifact> artifacts = parseArtifacts(parts[5]);
 
         return new Hero.HeroBuilder()
                 .name(name)
                 .heroClass(heroClass)
                 .level(level)
                 .experience(experience)
+                .currentHitPoints(currentHp)     // ← new
                 .artifacts(artifacts)
                 .build();
     }
@@ -221,6 +188,14 @@ public class HeroRepository {
     private long parseNonNegativeLong(String s, String field) {
         long v = Long.parseLong(s);
         if (v < 0) throw new IllegalArgumentException(field + " must be >= 0, got " + v);
+        return v;
+    }
+
+    private int parseNonNegativeInt(String s, String field) {
+        int v = Integer.parseInt(s);
+        if (v < 0) {
+            throw new IllegalArgumentException(field + " must be >= 0, got " + v);
+        }
         return v;
     }
 }

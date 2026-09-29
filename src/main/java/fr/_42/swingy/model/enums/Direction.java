@@ -3,18 +3,14 @@ package fr._42.swingy.model.enums;
 public enum Direction {
     NORTH, EAST, SOUTH, WEST;
 
-    public static Direction fromString(String direction) {
-        switch (direction.toLowerCase()) {
-            case "north":
-                return NORTH;
-            case "east":
-                return EAST;
-            case "south":
-                return SOUTH;
-            case "west":
-                return WEST;
-            default:
-                throw new IllegalArgumentException("Invalid direction: " + direction);
-        }
+    public static Direction fromString(String s) {
+        if (s == null) return null;
+        return switch (s.trim().toLowerCase()) {
+            case "north" -> NORTH;
+            case "east"  -> EAST;
+            case "south" -> SOUTH;
+            case "west"  -> WEST;
+            default      -> null;
+        };
     }
 }

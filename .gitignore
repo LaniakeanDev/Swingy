@@ -1,1 +1,4 @@
 *heroes.txt
+tools/
+target/
+dependency-reduced-pom.xml

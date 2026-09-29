@@ -64,8 +64,8 @@ public final class VillainPool {
      * @return a freshly constructed Villain
      */
     public static Villain rollForHeroLevel(Random random, int heroLevel, Position position) {
-        VillainTemplate template = templateFor(heroLevel)
-                .get(random.nextInt(templateFor(heroLevel).size()));
+        List<VillainTemplate> tier = templateFor(heroLevel);
+        VillainTemplate template = tier.get(random.nextInt(tier.size()));
         return template.toVillain(position);
     }
 
@@ -116,10 +116,7 @@ public final class VillainPool {
 
         /** Materializes a real Villain at the given position. */
         public Villain toVillain(Position position) {
-            Villain v = new Villain(name, hitPoints, position);
-            v.setAttack(attack);
-            v.setDefense(defense);
-            return v;
+            return new Villain(name, hitPoints, attack, defense, position);
         }
     }
 }

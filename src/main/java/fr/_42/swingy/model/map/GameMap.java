@@ -97,11 +97,10 @@ public class GameMap {
      *
      * @return true if the villain was placed, false if the cell was taken.
      */
-    public boolean placeVillain(Villain villain, Position p) {
+    public boolean placeVillain(Villain villain) {
+        Position p = villain.getPosition();
         requireInside(p);
-        if (grid[p.getY()][p.getX()] != null) {
-            return false;
-        }
+        if (grid[p.getY()][p.getX()] != null) return false;
         grid[p.getY()][p.getX()] = villain;
         villains.add(villain);
         return true;
@@ -153,7 +152,7 @@ public class GameMap {
                 return;                     // board is full; stop early
             }
             Villain v = VillainPool.rollForHeroLevel(random, heroLevel, p);
-            placeVillain(v, p);
+            placeVillain(v);
         }
     }
 

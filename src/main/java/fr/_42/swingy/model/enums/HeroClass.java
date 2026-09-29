@@ -40,12 +40,14 @@ public enum HeroClass {
         };
     }
 
-    public static HeroClass fromString(String className) {
-        for (HeroClass heroClass : HeroClass.values()) {
-            if (heroClass.name().equalsIgnoreCase(className)) {
-                return heroClass;
+    public static HeroClass fromString(String s) {
+        if (s == null) return null;
+        for (HeroClass hc : values()) {
+            if (hc.name().equalsIgnoreCase(s.trim())
+                    || hc.displayName().equalsIgnoreCase(s.trim())) {
+                return hc;
             }
         }
-        throw new IllegalArgumentException("Invalid hero class: " + className);
+        return null;
     }
 }

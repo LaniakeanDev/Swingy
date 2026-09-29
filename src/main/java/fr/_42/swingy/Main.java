@@ -6,11 +6,9 @@ import fr._42.swingy.util.Constants;
 import fr._42.swingy.validation.Validator;
 import fr._42.swingy.view.View;
 import fr._42.swingy.view.ConsoleView;
-// import fr._42.swingy.view.GuiView;
 
 import javax.validation.Validation;
 import javax.validation.ValidatorFactory;
-// import java.util.Arrays;
 
 /**
  * Entry point for the Swingy text-based RPG.
@@ -34,16 +32,19 @@ public final class Main {
         String mode = args[0].trim().toLowerCase();
         
         try {
-            View view = createView(mode);
+            View view;
+            try {
+                view = createView(mode);
+            } catch (IllegalArgumentException e) {
+                System.err.println("[swingy] " + e.getMessage());
+                printUsage();
+                System.exit(Constants.EXIT_USAGE);
+                return;
+            }
+
             Validator validator = createValidator();
             HeroRepository repository = new HeroRepository(Constants.SAVE_FILE);
-
-            GameController controller = new GameController(view, validator, repository);
-            controller.run();
-        } catch (IllegalArgumentException e) {
-            System.err.println("[swingy] " + e.getMessage());
-            printUsage();
-            System.exit(Constants.EXIT_USAGE);
+            new GameController(view, validator, repository).run();
         } catch (Exception e) {
             // Last-resort guard: never let a stack trace crash the jar silently
             System.err.println("[swingy] Fatal error: " + e.getMessage());

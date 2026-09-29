@@ -3,15 +3,15 @@ import java.util.Random;
 import java.util.List;
 
 import fr._42.swingy.model.entity.Artifact;
-import fr._42.swingy.model.entity.ArtifactPool;
 import fr._42.swingy.model.entity.Hero;
 import fr._42.swingy.model.entity.Villain;
 import fr._42.swingy.model.enums.EncounterResult;
 import fr._42.swingy.model.enums.HeroClass;
-// import fr._42.swingy.model.enums.ArtifactType;
 import fr._42.swingy.model.enums.Direction;
 import fr._42.swingy.model.map.GameMap;
 import fr._42.swingy.model.map.Position;
+import fr._42.swingy.model.battle.BattleReport;
+import fr._42.swingy.model.battle.BattleSimulator;
 import fr._42.swingy.persistence.HeroRepository;
 import fr._42.swingy.validation.Validator;
 import fr._42.swingy.view.View;
@@ -25,6 +25,7 @@ public class GameController {
     private Hero currentHero;
     private List<Hero> heroList;
     private final Random random = new Random();
+    private final BattleSimulator battleSimulator = new BattleSimulator(random);
 
     public GameController(View view, Validator validator, HeroRepository repository) {
         this.view = view;
@@ -35,7 +36,9 @@ public class GameController {
     public void run() {
         heroList = repository.loadAll();
         try {
-            currentHero = mainMenu();
+            while ((currentHero = mainMenu()) == null) {
+                view.displayMessage("No hero selected. Let's try again.");
+            }
             int size = mapSizeFor(currentHero.getLevel());
             map = new GameMap(size);
             currentHero.setPosition(map.center());
@@ -126,37 +129,63 @@ public class GameController {
 
     private Hero mainMenu() {
         view.displayMessage("Welcome to Swingy!");
-        view.displayMessage("Available heroes:");
-        for (int i = 0; i < heroList.size(); i++) {
-            Hero h = heroList.get(i);
-            view.displayMessage((i + 1) + ". " + h.getName() + " (Level " + h.getLevel() + ")");
-        }
-        int choice = Integer.parseInt(view.askInput("Select a hero by number, or 0 to create a new one: ").trim());
-        if (choice == 0) {
-            return createNewHero();
-        } else {
+
+        while (true) {
+            view.displayMessage("Available heroes:");
+            for (int i = 0; i < heroList.size(); i++) {
+                Hero h = heroList.get(i);
+                view.displayMessage("  " + (i + 1) + ". "
+                        + h.getName() + " (Level " + h.getLevel() + ")");
+            }
+
+            String input = view.askInput("Select a hero by number, or 0 to create a new one: ").trim();
+
+            int choice;
+            try {
+                choice = Integer.parseInt(input);
+            } catch (NumberFormatException e) {
+                view.displayError("Please enter a number.");
+                continue;
+            }
+
+            if (choice == 0) {
+                return createNewHero();
+            }
+            if (choice < 1 || choice > heroList.size()) {
+                view.displayError("No hero with number " + choice + ".");
+                continue;
+            }
             return heroList.get(choice - 1);
         }
     }
 
     private Hero createNewHero() {
-        String name = view.askInput("Enter hero name: ").trim();
-        String className = view.askInput("Enter hero class (e.g., Warrior, Mage): ").trim();
-        if (!validator.isValidHeroName(name)) {
-            view.displayError("Invalid hero name.");
-            return createNewHero();
+        while (true) {
+            String name = view.askInput("Enter hero name (or 'cancel'): ").trim();
+            if ("cancel".equalsIgnoreCase(name)) {
+                return null;
+            }
+
+            String className = view.askInput("Enter hero class: ").trim();
+            HeroClass heroClass = HeroClass.fromString(className);
+            if (heroClass == null) {
+                view.displayError("Unknown hero class: '" + className + "'");
+                continue;
+            }
+
+            Hero newHero = new Hero.HeroBuilder()
+                    .name(name)
+                    .heroClass(heroClass)
+                    .build();
+
+            if (!validator.isValid(newHero)) {
+                view.displayError(validator.validateAndCollect(newHero));
+                continue;
+            }
+
+            heroList.add(newHero);
+            return newHero;
         }
-        if (!validator.isValidHeroClass(className)) {
-            view.displayError("Invalid hero class.");
-            return createNewHero();
-        }
-        HeroClass heroClass = HeroClass.fromString(className);
-        Hero newHero = new Hero.HeroBuilder()
-            .name(name)
-            .heroClass(heroClass)
-            .build();
-        heroList.add(newHero);
-        return newHero;
     }
 
     private EncounterResult handleEncounter(Hero hero, Villain villain) {
@@ -165,90 +194,33 @@ public class GameController {
 
         String choice = view.askInput("Fight or Run? [f/r]: ").trim().toLowerCase();
         if (choice.startsWith("r")) {
-            if (random.nextBoolean()) {
+            if (random.nextBoolean()) {              // ← still uses `random`
                 return EncounterResult.HERO_FLED;
             }
             view.displayMessage("You failed to escape — you must fight!");
         }
 
-        return simulateBattle(hero, villain);
+        BattleReport report = battleSimulator.fight(hero, villain);
+
+        // Narrate every exchange
+        report.log().forEach(view::displayMessage);
+
+        // Handle the drop, if any
+        report.drop().ifPresent(artifact -> promptKeepArtifact(hero, artifact));
+
+        return report.result();
     }
 
-    /**
-     * Turn-based duel. Damage = max(1, attack - defense/2) with a
-     * ±20% luck multiplier. Hero strikes first.
-     */
-    private EncounterResult simulateBattle(Hero hero, Villain villain) {
-        int heroHp    = hero.getHitPoints();
-        int villainHp = villain.getHitPoints();
-
-        view.displayMessage(String.format(
-            "Battle begins! Hero %d HP vs Villain %d HP", heroHp, villainHp));
-
-        boolean heroTurn = true;
-        while (heroHp > 0 && villainHp > 0) {
-            if (heroTurn) {
-                int dmg = computeDamage(hero.getAttack(), villain.getDefense());
-                villainHp -= dmg;
-                view.displayMessage(String.format(
-                    "  You hit for %d. Villain HP: %d", dmg, Math.max(0, villainHp)));
-            } else {
-                int dmg = computeDamage(villain.getAttack(), hero.getDefense());
-                heroHp -= dmg;
-                view.displayMessage(String.format(
-                    "  Villain hits for %d. Your HP: %d", dmg, Math.max(0, heroHp)));
-            }
-            heroTurn = !heroTurn;
-        }
-
-        if (heroHp > 0) {
-            hero.takeDamage(hero.getHitPoints() - heroHp);
-            applyVictoryRewards(hero, villain);
-            return EncounterResult.HERO_WON;
-        }
-
-        hero.takeDamage(hero.getHitPoints());
-        return EncounterResult.HERO_LOST;
-    }
-
-    /** damage = max(1, attack - defense/2) * random[0.8, 1.2) */
-    private int computeDamage(int attack, int defense) {
-        int base = Math.max(1, attack - defense / 2);
-        double luck = 0.8 + random.nextDouble() * 0.4;
-        return Math.max(1, (int) Math.round(base * luck));
-    }
-
-    /** XP = power * 100; 40% chance of an artifact scaled to villain power. */
-    private void applyVictoryRewards(Hero hero, Villain villain) {
-        // --- XP ---
-        long xp = villain.getAttack() * 100L;
-        hero.gainExperience(xp);
-        view.displayMessage(String.format(
-            "You gain %d XP. (Level %d, %d XP to next)",
-            xp, hero.getLevel(), hero.experienceToNextLevel()));
-
-        // --- Artifact drop ---
-        if (random.nextDouble() >= 0.60) {
-            view.displayMessage("No artifact dropped.");
+    private void promptKeepArtifact(Hero hero, Artifact artifact) {
+        String keep = view.askInput("Keep it? [y/n]: ").trim().toLowerCase();
+        if (!keep.startsWith("y")) {
+            view.displayMessage("You leave it behind.");
             return;
         }
-
-        Artifact artifact = ArtifactPool.rollForPower(random, villain.getAttack());
-        view.displayMessage(String.format(
-            "The villain dropped: %s (+%d %s).",
-            artifact.getName(),
-            artifact.getValue(),
-            artifact.getType().displayName().toLowerCase()));
-
-        String keep = view.askInput("Keep it? [y/n]: ").trim().toLowerCase();
-        if (keep.startsWith("y")) {
-            if (hero.equipArtifact(artifact)) {
-                view.displayMessage("Equipped " + artifact.getName() + ".");
-            } else {
-                view.displayMessage("Your class can't use that artifact. Discarded.");
-            }
+        if (hero.equipArtifact(artifact)) {
+            view.displayMessage("Equipped " + artifact.getName() + ".");
         } else {
-            view.displayMessage("You leave it behind.");
+            view.displayMessage("Your class can't use that artifact. Discarded.");
         }
     }
 }

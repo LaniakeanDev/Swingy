@@ -101,7 +101,6 @@ public class ConsoleView implements View {
 
     @Override
     public void showHeroStats(Hero hero) {
-        int currentHp = hero.getHitPoints();      // max, for now
         System.out.println(BLUE + BOLD + "╭─ " + hero.getName()
                 + " the " + hero.getHeroClass().displayName() + " ─╮" + RESET);
         System.out.printf("  Level      : %d%n", hero.getLevel());
@@ -109,7 +108,8 @@ public class ConsoleView implements View {
                 hero.getExperience(), hero.experienceToNextLevel());
         System.out.printf("  Attack     : %d%n", hero.getAttack());
         System.out.printf("  Defense    : %d%n", hero.getDefense());
-        System.out.printf("  Hit Points : %d%n", currentHp);
+        System.out.printf("  Hit Points : %d / %d%n",
+            hero.getCurrentHitPoints(), hero.getHitPoints());
         System.out.printf("  Artifacts  : %d%n", hero.getArtifacts().size());
         System.out.println(BLUE + "╰──────────────────────────╯" + RESET);
     }

@@ -3,6 +3,11 @@ package fr._42.swingy.model.entity;
 import java.util.ArrayList;
 import java.util.List;
 
+import javax.validation.constraints.Min;
+import javax.validation.constraints.NotNull;
+import javax.validation.constraints.Pattern;
+import javax.validation.constraints.Size;
+
 import fr._42.swingy.model.map.Position;
 import fr._42.swingy.model.enums.ArtifactType;
 import fr._42.swingy.model.enums.HeroClass;
@@ -10,12 +15,25 @@ import fr._42.swingy.model.enums.HeroClass;
 
 public class Hero {
 
+    @NotNull
+    @Size(min = 3, max = 20)
+    @Pattern(regexp = "[A-Za-z ]+")
     private final String name;
+
+    @NotNull
     private final HeroClass heroClass;
 
+    @Min(1)
     private int level;
+
+    @Min(0)
     private long experience;
-    private int hitPoints;
+
+    @Min(0)
+    private final int baseHitPoints;
+
+    @Min(0)
+    private int currentHitPoints;
     private List<Artifact> artifacts;
     private Position position;
 
@@ -65,15 +83,16 @@ public class Hero {
         return base + levelBonus + artifactBonus;
     }
 
-    /** Max hit points = class base + level bonus + helm bonuses. */
     public int getHitPoints() {
-        int base = hitPoints;
         int levelBonus = (level - 1) * 5;
         int artifactBonus = artifacts.stream()
                 .filter(a -> a.getType() == ArtifactType.HELM)
-                .mapToInt(Artifact::getValue)
-                .sum();
-        return base + levelBonus + artifactBonus;
+                .mapToInt(Artifact::getValue).sum();
+        return baseHitPoints + levelBonus + artifactBonus;
+    }
+
+    public int getCurrentHitPoints() {
+        return currentHitPoints;
     }
 
     /** Defensive copy so callers can't mutate the internal list. */
@@ -98,8 +117,13 @@ public class Hero {
         this.heroClass = b.heroClass;
         this.level     = b.level;
         this.experience = b.experience;
-        this.hitPoints = heroClass.getBaseHitPoints();
         this.artifacts = b.artifacts;
+        this.baseHitPoints = heroClass.getBaseHitPoints();
+        // If the builder supplied an HP value, honor it.
+        // Otherwise (fresh hero), start at max HP.
+        this.currentHitPoints = (b.currentHitPoints >= 0)
+                ? b.currentHitPoints
+                : getHitPoints();
     }
 
     public static class HeroBuilder {
@@ -107,6 +131,7 @@ public class Hero {
         private HeroClass heroClass;
         private int level = 1;
         private long experience = 0L;
+        private int currentHitPoints = -1;         // ← new; -1 means "not set"
         private List<Artifact> artifacts = new ArrayList<>();
 
         public HeroBuilder name(String name) {
@@ -129,6 +154,11 @@ public class Hero {
             return this;
         }
 
+        public HeroBuilder currentHitPoints(int currentHitPoints) {   // ← new
+            this.currentHitPoints = currentHitPoints;
+            return this;
+        }
+
         public HeroBuilder artifacts(List<Artifact> artifacts) {
             this.artifacts = artifacts;
             return this;
@@ -144,18 +174,20 @@ public class Hero {
     /* ------------------------------------------------------------------ */
 
     public void takeDamage(int dmg) {
-        hitPoints -= dmg;
+        currentHitPoints = Math.max(0, currentHitPoints - dmg);
     }
 
     public void gainExperience(long xp) {
         experience += xp;
-        if (experience >= experienceToNextLevel()) {
+        while (experience >= experienceToNextLevel()) {
+            experience -= experienceToNextLevel();
             levelUp();
         }
     }
 
-    public int experienceToNextLevel() {
-        return level * 100;
+    public long experienceToNextLevel() {
+        long l = level;
+        return l * 1000L + (l - 1) * (l - 1) * 450L;
     }
 
     private void levelUp() {
@@ -163,16 +195,9 @@ public class Hero {
     }
 
     public boolean equipArtifact(Artifact artifact) {
-        if (artifact.getType() == ArtifactType.WEAPON) {
-            artifacts.add(artifact);
-            return true;
-        } else if (artifact.getType() == ArtifactType.ARMOR) {
-            artifacts.add(artifact);
-            return true;
-        } else if (artifact.getType() == ArtifactType.HELM) {
-            artifacts.add(artifact);
-            return true;
-        }
-        return false;
+        if (artifact == null) return false;
+        if (!artifact.getType().isCompatibleWith(heroClass)) return false;
+        artifacts.add(artifact);
+        return true;
     }
 }
