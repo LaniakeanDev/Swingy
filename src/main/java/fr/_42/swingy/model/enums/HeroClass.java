@@ -19,14 +19,25 @@ public enum HeroClass {
         this.baseHitPoints = baseHitPoints;
     }
 
-    public int getBaseAttack() {
-        return this.baseAttack;
-    }
-    public int getBaseDefense() {
-        return this.baseDefense;
-    }
-    public int getBaseHitPoints() {
-        return this.baseHitPoints;
+    public int getBaseAttack()    { return this.baseAttack; }
+    public int getBaseDefense()   { return this.baseDefense; }
+    public int getBaseHitPoints() { return this.baseHitPoints; }
+
+    /**
+     * Human-readable label for the UI.
+     * The enum's {@link #name()} remains the canonical identifier used
+     * for serialization and {@link #fromString(String)}.
+     */
+    public String displayName() {
+        return switch (this) {
+            case CULTURE_CITIZEN         -> "Culture Citizen";
+            case CONTACT_AGENT           -> "Contact Agent";
+            case SC_AGENT                -> "SC Agent";
+            case CULTURE_DRONE_CIVILIAN  -> "Culture Drone (Civilian)";
+            case CULTURE_DRONE_CONTACT   -> "Culture Drone (Contact)";
+            case CONTRACTOR_AGENT        -> "Contractor Agent";
+            case CULTURE_REFERER         -> "Culture Referer";
+        };
     }
 
     public static HeroClass fromString(String className) {

@@ -5,12 +5,12 @@ import fr._42.swingy.persistence.HeroRepository;
 import fr._42.swingy.util.Constants;
 import fr._42.swingy.validation.Validator;
 import fr._42.swingy.view.View;
-import fr._42.swingy.view.console.ConsoleView;
-import fr._42.swingy.view.gui.GuiView;
+import fr._42.swingy.view.ConsoleView;
+// import fr._42.swingy.view.GuiView;
 
 import javax.validation.Validation;
 import javax.validation.ValidatorFactory;
-import java.util.Arrays;
+// import java.util.Arrays;
 
 /**
  * Entry point for the Swingy text-based RPG.
@@ -62,7 +62,8 @@ public final class Main {
             case "console":
                 return new ConsoleView();
             case "gui":
-                return new GuiView();
+                // return new GuiView();
+                return new ConsoleView();
             default:
                 throw new IllegalArgumentException("Unknown mode: '" + mode + "'");
         }

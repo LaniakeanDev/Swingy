@@ -147,8 +147,14 @@ public class HeroRepository {
         List<Artifact> artifacts = hero.getArtifacts();
         for (int i = 0; i < artifacts.size(); i++) {
             Artifact a = artifacts.get(i);
-            sb.append(a.getType().name()).append(ARTIFACT_KV).append(a.getValue());
-            if (i < artifacts.size() - 1) sb.append(ARTIFACT_SEP);
+            sb.append(a.getType().name())
+            .append(ARTIFACT_KV)
+            .append(a.getValue())
+            .append(ARTIFACT_KV)
+            .append(a.getName());
+            if (i < artifacts.size() - 1) {
+                sb.append(ARTIFACT_SEP);
+            }
         }
         return sb.toString();
     }
@@ -169,14 +175,11 @@ public class HeroRepository {
         int        hitPoints  = parsePositiveInt(parts[6], "hitPoints");
         List<Artifact> artifacts = parseArtifacts(parts[7]);
 
-        return new Hero.Builder()
+        return new Hero.HeroBuilder()
                 .name(name)
                 .heroClass(heroClass)
                 .level(level)
                 .experience(experience)
-                .attack(attack)
-                .defense(defense)
-                .hitPoints(hitPoints)
                 .artifacts(artifacts)
                 .build();
     }
@@ -187,13 +190,15 @@ public class HeroRepository {
         }
         List<Artifact> artifacts = new ArrayList<>();
         for (String token : field.split(ARTIFACT_SEP)) {
-            String[] kv = token.split(ARTIFACT_KV, 2);
-            if (kv.length != 2) {
+            // Split into at most 3 pieces so names containing ':' still work
+            String[] parts = token.split(ARTIFACT_KV, 3);
+            if (parts.length != 3) {
                 throw new IllegalArgumentException("bad artifact token: '" + token + "'");
             }
-            ArtifactType type = ArtifactType.valueOf(kv[0]);
-            int value = Integer.parseInt(kv[1]);
-            artifacts.add(new Artifact(type, value));
+            ArtifactType type = ArtifactType.valueOf(parts[0]);
+            int value         = Integer.parseInt(parts[1]);
+            String name       = parts[2];
+            artifacts.add(new Artifact(type, value, name));
         }
         return artifacts;
     }

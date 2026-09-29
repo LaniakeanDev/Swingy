@@ -49,7 +49,7 @@ public class Hero {
         int levelBonus = (level - 1) * 2;
         int artifactBonus = artifacts.stream()
                 .filter(a -> a.getType() == ArtifactType.WEAPON)
-                .mapToInt(Artifact::getBonus)
+                .mapToInt(Artifact::getValue)
                 .sum();
         return base + levelBonus + artifactBonus;
     }
@@ -60,18 +60,18 @@ public class Hero {
         int levelBonus = (level - 1);
         int artifactBonus = artifacts.stream()
                 .filter(a -> a.getType() == ArtifactType.ARMOR)
-                .mapToInt(Artifact::getBonus)
+                .mapToInt(Artifact::getValue)
                 .sum();
         return base + levelBonus + artifactBonus;
     }
 
     /** Max hit points = class base + level bonus + helm bonuses. */
     public int getHitPoints() {
-        int base = heroClass.getBaseHitPoints();
+        int base = hitPoints;
         int levelBonus = (level - 1) * 5;
         int artifactBonus = artifacts.stream()
                 .filter(a -> a.getType() == ArtifactType.HELM)
-                .mapToInt(Artifact::getBonus)
+                .mapToInt(Artifact::getValue)
                 .sum();
         return base + levelBonus + artifactBonus;
     }
@@ -98,7 +98,7 @@ public class Hero {
         this.heroClass = b.heroClass;
         this.level     = b.level;
         this.experience = b.experience;
-        this.hitPoints = getHitPoints();
+        this.hitPoints = heroClass.getBaseHitPoints();
         this.artifacts = b.artifacts;
     }
 
