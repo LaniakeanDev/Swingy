@@ -88,6 +88,7 @@ public class GameController {
 
     private void saveAndExit() {
         repository.saveAll(heroList);
+        view.displayMessage("Your hero(es) have been saved");
     }
 
     private void handleMove(Direction dir) {
@@ -159,20 +160,39 @@ public class GameController {
         }
     }
 
-    private Hero createNewHero() {
+    private String askHeroClass() {
         while (true) {
-            String name = view.askInput("Enter hero name (or 'cancel'): ").trim();
-            if ("cancel".equalsIgnoreCase(name)) {
-                return null;
+            view.displayMessage("Available hero classes:");
+            for (HeroClass hc : HeroClass.values()) {
+                view.displayMessage("  - " + hc.name());
             }
-
             String className = view.askInput("Enter hero class: ").trim();
             HeroClass heroClass = HeroClass.fromString(className);
-            if (heroClass == null) {
-                view.displayError("Unknown hero class: '" + className + "'");
-                continue;
+            if (heroClass != null) {
+                return className;
+            }
+            view.displayError("Unknown hero class: '" + className + "'");
+        }
+    }
+
+    private boolean checkNameUnicity(String name) {
+        for (Hero h : heroList) {
+            if (h.getName().equalsIgnoreCase(name)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private Hero createNewHero() {
+        while (true) {
+            String name = view.askInput("Enter hero name: ").trim();
+            while (!checkNameUnicity(name)) {
+                view.displayMessage("Hero name already taken. Please choose another.");
+                name = view.askInput("Enter hero name: ").trim();
             }
 
+            HeroClass heroClass = HeroClass.fromString(askHeroClass());
             Hero newHero = new Hero.HeroBuilder()
                     .name(name)
                     .heroClass(heroClass)

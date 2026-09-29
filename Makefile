@@ -85,3 +85,7 @@ clean:
 	@echo "→ Removing $(MAVEN_HOME) and $(MAVEN_TARBALL)"
 	rm -rf $(MAVEN_HOME)
 	rm -f  $(MAVEN_TARBALL)
+
+run:
+	@echo "→ Running the project..."
+	java -jar target/swingy.jar console
