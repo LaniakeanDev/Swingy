@@ -1,13 +1,14 @@
 package fr._42.swingy.model.enums;
 
 public enum HeroClass {
-    CULTURE_CITIZEN(1, 2, 3),
-    CONTACT_AGENT(1, 2, 3),
-    SC_AGENT(1, 2, 3),
-    CULTURE_DRONE_CIVILIAN(1, 2, 3),
-    CULTURE_DRONE_CONTACT(1, 2, 3),
-    CONTRACTOR_AGENT(1, 2, 3),
-    CULTURE_REFERER(1, 2, 3);
+    CULTURE_CITIZEN(10, 2, 300),
+    CONTACT_AGENT(10, 2, 300),
+    SC_AGENT(10, 2, 300),
+    DRONE(10, 2, 300),
+    GCU(10, 2, 300),
+    GSV(10, 2, 300),
+    CONTRACTOR(10, 2, 300),
+    REFERER(10, 2, 300);
 
     private final int baseAttack;
     private final int baseDefense;
@@ -29,15 +30,22 @@ public enum HeroClass {
      * for serialization and {@link #fromString(String)}.
      */
     public String displayName() {
-        return switch (this) {
-            case CULTURE_CITIZEN         -> "Culture Citizen";
-            case CONTACT_AGENT           -> "Contact Agent";
-            case SC_AGENT                -> "SC Agent";
-            case CULTURE_DRONE_CIVILIAN  -> "Culture Drone (Civilian)";
-            case CULTURE_DRONE_CONTACT   -> "Culture Drone (Contact)";
-            case CONTRACTOR_AGENT        -> "Contractor Agent";
-            case CULTURE_REFERER         -> "Culture Referer";
-        };
+        StringBuilder sb = new StringBuilder();
+        for (String word : name().split("_")) {
+            if (word.isEmpty()) {
+                continue;
+            }
+            if (sb.length() > 0) {
+                sb.append(' ');
+            }
+            if (word.length() <= 3 && word.equals(word.toUpperCase())) {
+                sb.append(word);                                 // preserve SC, GCU, GSV
+            } else {
+                sb.append(Character.toUpperCase(word.charAt(0)))
+                .append(word.substring(1).toLowerCase());
+            }
+        }
+        return sb.toString();
     }
 
     public static HeroClass fromString(String s) {

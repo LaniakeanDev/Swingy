@@ -16,7 +16,11 @@ public class GuiView implements View {
     private final BlockingQueue<String> inputQueue = new LinkedBlockingQueue<>();
 
     public GuiView() {
-        SwingUtilities.invokeLater(this::buildUi);
+        try {
+            SwingUtilities.invokeAndWait(this::buildUi);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to initialize GUI", e);
+        }
     }
 
     private void buildUi() {

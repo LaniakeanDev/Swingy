@@ -41,8 +41,10 @@ public class GameController {
             }
             int size = mapSizeFor(currentHero.getLevel());
             map = new GameMap(size);
-            currentHero.setPosition(map.center());
-            map.placeHero(currentHero, map.center());
+            if (currentHero.getPosition() == null) {
+                currentHero.setPosition(map.center());
+            }
+            map.placeHero(currentHero, currentHero.getPosition());
             map.generateVillains(villainCountFor(size), currentHero.getLevel());
             gameLoop();
         } finally {
@@ -75,10 +77,10 @@ public class GameController {
 
             handleMove(dir);
 
-            if (currentHero.getPosition() != null && map.isBorder(currentHero.getPosition())) {
-                view.displayMessage("You reached the border — you win!");
-                running = false;
-            }
+            // if (currentHero.getPosition() != null && map.isBorder(currentHero.getPosition())) {
+            //     view.displayMessage("You reached the border — you win!");
+            //     running = false;
+            // }
         }
     }
 
@@ -95,17 +97,13 @@ public class GameController {
         Position current = currentHero.getPosition();
         Position next    = map.getNextPosition(current, dir);
 
-        if (map.isBorder(next)) {
-            view.displayMessage("You reached the border — you win!");
-            saveAndExit();
-            System.exit(0);
-        }
-
         if (!map.isInside(next)) {
             view.displayError("You can't leave the map.");
             return;
         }
 
+        // 1. Villain encounter — fight/run happens BEFORE the border win check,
+        //    because a villain standing on the border must be cleared first.
         Villain villain = map.getVillainAt(next);
         if (villain != null) {
             EncounterResult result = handleEncounter(currentHero, villain);
@@ -114,32 +112,51 @@ public class GameController {
                     view.displayMessage("You defeated " + villain.getName() + "!");
                     map.removeVillain(villain);
                     currentHero.setPosition(next);
+                    // Fall through to check if this winning move also reached the border.
                 }
-                case HERO_FLED -> view.displayMessage(
-                    "You fled. The villain still blocks the path.");
+                case HERO_FLED -> {
+                    view.displayMessage("You fled. The villain still blocks the path.");
+                    return;
+                }
                 case HERO_LOST -> {
                     view.displayMessage("You were defeated. Game over.");
                     saveAndExit();
                     System.exit(0);
+                    return;
                 }
             }
-            return;
+        } else {
+            // No villain — move directly onto the tile.
+            currentHero.setPosition(next);
         }
-        currentHero.setPosition(next);
+
+        // 2. Win check runs AFTER the hero is on the tile, whether it was
+        //    empty or occupied by a defeated villain.
+        if (map.isBorder(next)) {
+            view.displayMessage("You reached the border — you win!");
+            saveAndExit();
+            System.exit(0);
+        }
     }
 
     private Hero mainMenu() {
         view.displayMessage("Welcome to Swingy!");
 
         while (true) {
-            view.displayMessage("Available heroes:");
-            for (int i = 0; i < heroList.size(); i++) {
-                Hero h = heroList.get(i);
-                view.displayMessage("  " + (i + 1) + ". "
-                        + h.getName() + " (Level " + h.getLevel() + ")");
+            String input;
+            if (!heroList.isEmpty()) {
+                view.displayMessage("Available heroes:");
+                for (int i = 0; i < heroList.size(); i++) {
+                    Hero h = heroList.get(i);
+                    view.displayMessage("  " + (i + 1) + ". "
+                            + h.getName() + " (Level " + h.getLevel() + ")");
+                }
+                input = view.askInput("Select a hero by number, or 0 to create a new one: ").trim();
             }
-
-            String input = view.askInput("Select a hero by number, or 0 to create a new one: ").trim();
+            else {
+                view.displayMessage("Please create a new hero: ");
+                return createNewHero();
+            }
 
             int choice;
             try {

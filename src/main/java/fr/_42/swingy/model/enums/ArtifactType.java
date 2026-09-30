@@ -13,8 +13,8 @@ public enum ArtifactType {
         return switch (this) {
             case WEAPON, HELM -> true;                       // anyone
             case ARMOR        -> switch (heroClass) {
-                case CONTACT_AGENT, SC_AGENT, CULTURE_DRONE_CONTACT, CONTRACTOR_AGENT -> true;
-                case CULTURE_CITIZEN,   CULTURE_DRONE_CIVILIAN, CULTURE_REFERER         -> false;
+                case CONTACT_AGENT, SC_AGENT, DRONE, CONTRACTOR, GCU, GSV -> true;
+                case CULTURE_CITIZEN, REFERER                             -> false;
             };
         };
     }

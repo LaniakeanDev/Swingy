@@ -124,6 +124,7 @@ public class Hero {
         this.currentHitPoints = (b.currentHitPoints >= 0)
                 ? b.currentHitPoints
                 : getHitPoints();
+        this.position = b.position;
     }
 
     public static class HeroBuilder {
@@ -131,8 +132,14 @@ public class Hero {
         private HeroClass heroClass;
         private int level = 1;
         private long experience = 0L;
-        private int currentHitPoints = -1;         // ← new; -1 means "not set"
+        private int currentHitPoints = -1;         // -1 means "not set"
         private List<Artifact> artifacts = new ArrayList<>();
+        private Position position;
+
+        public HeroBuilder position(Position position) {
+            this.position = position;
+            return this;
+        }
 
         public HeroBuilder name(String name) {
             this.name = name;
@@ -179,8 +186,7 @@ public class Hero {
 
     public void gainExperience(long xp) {
         experience += xp;
-        while (experience >= experienceToNextLevel()) {
-            experience -= experienceToNextLevel();
+        if (experience >= experienceToNextLevel()) {
             levelUp();
         }
     }

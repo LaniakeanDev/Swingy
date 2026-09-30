@@ -1,11 +1,13 @@
 package fr._42.swingy;
 
+import java.awt.GraphicsEnvironment;
 import fr._42.swingy.controller.GameController;
 import fr._42.swingy.persistence.HeroRepository;
 import fr._42.swingy.util.Constants;
 import fr._42.swingy.validation.Validator;
 import fr._42.swingy.view.View;
 import fr._42.swingy.view.ConsoleView;
+import fr._42.swingy.view.GuiView;
 
 import javax.validation.Validation;
 import javax.validation.ValidatorFactory;
@@ -63,8 +65,12 @@ public final class Main {
             case "console":
                 return new ConsoleView();
             case "gui":
-                // return new GuiView();
-                return new ConsoleView();
+                if (GraphicsEnvironment.isHeadless()) {
+                    throw new IllegalArgumentException(
+                        "GUI mode requires a display — no X11/Wayland available. "
+                        + "Use 'console' mode, or run from a desktop session.");
+                }
+                return new GuiView();
             default:
                 throw new IllegalArgumentException("Unknown mode: '" + mode + "'");
         }

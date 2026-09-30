@@ -17,6 +17,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import fr._42.swingy.model.map.Position;
+
 /**
  * Persists heroes to a plain-text file. One hero per line, fields
  * separated by '|', artifacts inlined as type:value pairs.
@@ -29,7 +31,7 @@ public class HeroRepository {
     private static final String FIELD_SEP      = "|";
     private static final String ARTIFACT_SEP   = ",";
     private static final String ARTIFACT_KV    = ":";
-    private static final int    EXPECTED_FIELDS = 6; // 5 hero fields + artifacts column
+    private static final int    EXPECTED_FIELDS = 8; // 7 hero fields + artifacts column
 
     private final Path saveFile;
 
@@ -112,6 +114,15 @@ public class HeroRepository {
         sb.append(hero.getExperience()).append(FIELD_SEP);
         sb.append(hero.getCurrentHitPoints()).append(FIELD_SEP);
 
+        Position pos = hero.getPosition();
+        if (pos != null) {
+            sb.append(pos.getX()).append(FIELD_SEP);
+            sb.append(pos.getY()).append(FIELD_SEP);
+        } else {
+            sb.append("-1").append(FIELD_SEP);
+            sb.append("-1").append(FIELD_SEP);
+        }
+
         List<Artifact> artifacts = hero.getArtifacts();
         for (int i = 0; i < artifacts.size(); i++) {
             Artifact a = artifacts.get(i);
@@ -139,14 +150,19 @@ public class HeroRepository {
         int        level      = parsePositiveInt(parts[2], "level");
         long       experience = parseNonNegativeLong(parts[3], "experience");
         int        currentHp  = parseNonNegativeInt(parts[4], "hitPoints");   // ← new
-        List<Artifact> artifacts = parseArtifacts(parts[5]);
+        int x = Integer.parseInt(parts[5]);
+        int  y = Integer.parseInt(parts[6]);
+        List<Artifact> artifacts = parseArtifacts(parts[7]);
+
+        Position position = (x < 0 || y < 0) ? null : new Position(x, y);
 
         return new Hero.HeroBuilder()
                 .name(name)
                 .heroClass(heroClass)
                 .level(level)
                 .experience(experience)
-                .currentHitPoints(currentHp)     // ← new
+                .currentHitPoints(currentHp)
+                .position(position)
                 .artifacts(artifacts)
                 .build();
     }
