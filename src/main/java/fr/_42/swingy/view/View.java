@@ -15,5 +15,7 @@ public interface View {
     void showHeroStats(Hero hero);
     void displayHeroList(List<Hero> heroes);
     void showBattleResult(EncounterResult result, Hero hero, Villain villain);
+    void showWinDialog(Hero hero);
+    void showLossDialog(Hero hero, Villain villain);
     void close();
 }

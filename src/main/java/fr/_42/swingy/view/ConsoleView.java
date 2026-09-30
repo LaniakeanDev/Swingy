@@ -132,6 +132,16 @@ public class ConsoleView implements View {
     }
 
     @Override
+    public void showWinDialog(Hero hero) {
+        // Console already prints the message inline; no popup.
+    }
+
+    @Override
+    public void showLossDialog(Hero hero, Villain villain) {
+        // Same — the controller's message is enough.
+    }
+
+    @Override
     public void displayHeroList(List<Hero> heroes) {
         if (heroes.isEmpty()) {
             System.out.println("No heroes saved. Create one to begin.");

@@ -1,12 +1,15 @@
 package fr._42.swingy.view;
 
 import fr._42.swingy.model.entity.Hero;
+import fr._42.swingy.model.entity.Villain;
 import fr._42.swingy.model.enums.EncounterResult;
 import fr._42.swingy.model.map.GameMap;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import javax.swing.*;
 import java.util.List;
+import java.awt.BorderLayout;
+
 
 public class GuiView implements View {
 
@@ -27,21 +30,70 @@ public class GuiView implements View {
         frame = new JFrame("Swingy");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
-        output = new JTextArea(30, 80);
+        // --- Output area (the scrolling log / map) ---
+        output = new JTextArea(30, 30);
         output.setEditable(false);
-        output.setFont(new java.awt.Font("Monospaced", java.awt.Font.PLAIN, 14));
+        output.setFont(new java.awt.Font("Monospaced", java.awt.Font.PLAIN, 32));
+        output.setMargin(new java.awt.Insets(10, 10, 10, 10));
 
-        input = new JTextField();
+        // --- Input field ---
+        input = new JTextField(80);
+        input.setFont(new java.awt.Font("Monospaced", java.awt.Font.PLAIN, 32));
+        input.setMargin(new java.awt.Insets(8, 8, 8, 8));
         input.addActionListener(e -> {
             inputQueue.offer(input.getText());
             input.setText("");
         });
 
+        // --- Labelled input panel ---
+        JPanel inputPanel = new JPanel(new BorderLayout(8, 0));
+        JLabel prompt = new JLabel("Command:");
+        prompt.setFont(new java.awt.Font("Monospaced", java.awt.Font.BOLD, 24));
+        inputPanel.add(prompt, BorderLayout.WEST);
+        inputPanel.add(input,  BorderLayout.CENTER);
+        inputPanel.setBorder(javax.swing.BorderFactory.createEmptyBorder(8, 8, 8, 8));
+
+        // --- Assemble the frame ---
         frame.getContentPane().add(new JScrollPane(output), "Center");
-        frame.getContentPane().add(input, "South");
+        frame.getContentPane().add(inputPanel, "South");
+
         frame.pack();
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
+    }
+
+    @Override
+    public void showWinDialog(Hero hero) {
+        try {
+            SwingUtilities.invokeAndWait(() -> {
+                JOptionPane.showMessageDialog(
+                        frame,
+                        "Congratulations, " + hero.getName() + "!\n"
+                        + "You reached the border at level " + hero.getLevel() + ".",
+                        "Victory",
+                        JOptionPane.INFORMATION_MESSAGE);
+            });
+        } catch (Exception e) {
+            // If the EDT is interrupted for any reason, fall through so the
+            // controller can still save and exit cleanly.
+            displayMessage("Victory! (dialog failed to display: " + e.getMessage() + ")");
+        }
+    }
+
+    @Override
+    public void showLossDialog(Hero hero, Villain villain) {
+        try {
+            SwingUtilities.invokeAndWait(() -> {
+                JOptionPane.showMessageDialog(
+                        frame,
+                        "You were defeated by " + villain.getName() + ".\n"
+                        + "Better luck next time, " + hero.getName() + ".",
+                        "Game Over",
+                        JOptionPane.ERROR_MESSAGE);
+            });
+        } catch (Exception e) {
+            displayMessage("Game over. (dialog failed to display: " + e.getMessage() + ")");
+        }
     }
 
     @Override public void displayMessage(String m) { SwingUtilities.invokeLater(() -> { output.append(m + "\n"); }); }

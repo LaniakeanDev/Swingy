@@ -49,6 +49,7 @@ public class GameController {
             gameLoop();
         } finally {
             saveAndExit();
+            view.close();
         }
     }
 
@@ -120,6 +121,7 @@ public class GameController {
                 }
                 case HERO_LOST -> {
                     view.displayMessage("You were defeated. Game over.");
+                    view.showLossDialog(currentHero, villain);
                     saveAndExit();
                     System.exit(0);
                     return;
@@ -134,6 +136,7 @@ public class GameController {
         //    empty or occupied by a defeated villain.
         if (map.isBorder(next)) {
             view.displayMessage("You reached the border — you win!");
+            view.showWinDialog(currentHero);
             saveAndExit();
             System.exit(0);
         }
