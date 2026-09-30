@@ -66,17 +66,41 @@ public class GuiView implements View {
     public void showWinDialog(Hero hero) {
         try {
             SwingUtilities.invokeAndWait(() -> {
-                JOptionPane.showMessageDialog(
-                        frame,
-                        "Congratulations, " + hero.getName() + "!\n"
-                        + "You reached the border at level " + hero.getLevel() + ".",
-                        "Victory",
-                        JOptionPane.INFORMATION_MESSAGE);
+                JLabel message = new JLabel(
+                        "<html><div style='text-align:center;'>"
+                        + "<h1 style='font-size:48pt;'>Victory</h1>"
+                        + "<p style='font-size:32pt;'>Congratulations, " + hero.getName() + "!<br>"
+                        + "You reached the border at level " + hero.getLevel() + ".</p>"
+                        + "</div></html>");
+                message.setBorder(javax.swing.BorderFactory.createEmptyBorder(20, 30, 20, 30));
+
+                // Build the pane manually so we can reach the buttons.
+                JOptionPane pane = new JOptionPane(
+                        message,
+                        JOptionPane.INFORMATION_MESSAGE,
+                        JOptionPane.DEFAULT_OPTION);
+
+                JDialog dialog = pane.createDialog(frame, "Victory");
+
+                // Scale every button's font and padding.
+                for (java.awt.Component c : pane.getComponents()) {
+                    if (c instanceof javax.swing.JPanel) {
+                        for (java.awt.Component inner : ((javax.swing.JPanel) c).getComponents()) {
+                            if (inner instanceof javax.swing.JButton) {
+                                javax.swing.JButton btn = (javax.swing.JButton) inner;
+                                btn.setFont(new java.awt.Font("Monospaced", java.awt.Font.BOLD, 20));
+                                btn.setMargin(new java.awt.Insets(10, 30, 10, 30));
+                            }
+                        }
+                    }
+                }
+
+                dialog.pack();                       // re-pack now that the button is bigger
+                dialog.setLocationRelativeTo(frame);
+                dialog.setVisible(true);             // blocks until dismissed
             });
         } catch (Exception e) {
-            // If the EDT is interrupted for any reason, fall through so the
-            // controller can still save and exit cleanly.
-            displayMessage("Victory! (dialog failed to display: " + e.getMessage() + ")");
+            displayMessage("Victory!");
         }
     }
 
@@ -84,15 +108,41 @@ public class GuiView implements View {
     public void showLossDialog(Hero hero, Villain villain) {
         try {
             SwingUtilities.invokeAndWait(() -> {
-                JOptionPane.showMessageDialog(
-                        frame,
-                        "You were defeated by " + villain.getName() + ".\n"
-                        + "Better luck next time, " + hero.getName() + ".",
-                        "Game Over",
-                        JOptionPane.ERROR_MESSAGE);
+                JLabel message = new JLabel(
+                        "<html><div style='text-align:center;'>"
+                        + "<h1 style='font-size:48pt;'>Game Over</h1>"
+                        + "<p style='font-size:32pt;'>You were defeated by " + villain.getName() + "!<br>"
+                        + "Better luck next time, " + hero.getName() + ".</p>"
+                        + "</div></html>");
+                message.setBorder(javax.swing.BorderFactory.createEmptyBorder(20, 30, 20, 30));
+
+                // Build the pane manually so we can reach the buttons.
+                JOptionPane pane = new JOptionPane(
+                        message,
+                        JOptionPane.INFORMATION_MESSAGE,
+                        JOptionPane.DEFAULT_OPTION);
+
+                JDialog dialog = pane.createDialog(frame, "Victory");
+
+                // Scale every button's font and padding.
+                for (java.awt.Component c : pane.getComponents()) {
+                    if (c instanceof javax.swing.JPanel) {
+                        for (java.awt.Component inner : ((javax.swing.JPanel) c).getComponents()) {
+                            if (inner instanceof javax.swing.JButton) {
+                                javax.swing.JButton btn = (javax.swing.JButton) inner;
+                                btn.setFont(new java.awt.Font("Monospaced", java.awt.Font.BOLD, 36));
+                                btn.setMargin(new java.awt.Insets(10, 30, 10, 30));
+                            }
+                        }
+                    }
+                }
+
+                dialog.pack();                       // re-pack now that the button is bigger
+                dialog.setLocationRelativeTo(frame);
+                dialog.setVisible(true);             // blocks until dismissed
             });
         } catch (Exception e) {
-            displayMessage("Game over. (dialog failed to display: " + e.getMessage() + ")");
+            displayMessage("Victory!");
         }
     }
 
