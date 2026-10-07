@@ -24,14 +24,15 @@ public class GameMap {
     private final int size;
     private final Object[][] grid;              // Object so it can hold Hero or Villain
     private final List<Villain> villains = new ArrayList<>();
-    private final Random random = new Random();
+    private final Random random;
 
-    public GameMap(int size) {
+    public GameMap(int size, Random random) {
         if (size <= 0) {
             throw new IllegalArgumentException("Map size must be positive, got " + size);
         }
         this.size = size;
         this.grid = new Object[size][size];
+        this.random = random;
     }
 
     /* ------------------------------------------------------------------ */
@@ -105,7 +106,24 @@ public class GameMap {
         villains.add(villain);
         return true;
     }
-
+    
+    /** Replaces the villain population wholesale. Used by load. */
+    public void replaceVillains(List<Villain> newVillains) {
+        // Clear the grid of villains first.
+        for (int y = 0; y < size; y++) {
+            for (int x = 0; x < size; x++) {
+                if (grid[y][x] instanceof Villain) grid[y][x] = null;
+            }
+        }
+        villains.clear();
+        for (Villain v : newVillains) {
+            // placeVillain rejects occupied cells; on a fresh grid there are none
+            if (!placeVillain(v)) {
+                System.err.println("[GameMap] Could not place villain " + v.getName()
+                        + " at " + v.getPosition() + " — cell occupied");
+            }
+        }
+    }
     /* ------------------------------------------------------------------ */
     /*  Geometry helpers                                                   */
     /* ------------------------------------------------------------------ */

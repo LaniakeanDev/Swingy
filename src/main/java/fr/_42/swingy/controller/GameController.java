@@ -1,6 +1,8 @@
 package fr._42.swingy.controller;
-import java.util.Random;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.Random;
 
 import fr._42.swingy.model.entity.Artifact;
 import fr._42.swingy.model.entity.Hero;
@@ -12,7 +14,7 @@ import fr._42.swingy.model.map.GameMap;
 import fr._42.swingy.model.map.Position;
 import fr._42.swingy.model.battle.BattleReport;
 import fr._42.swingy.model.battle.BattleSimulator;
-import fr._42.swingy.persistence.HeroRepository;
+import fr._42.swingy.persistence.GameRepository;
 import fr._42.swingy.validation.Validator;
 import fr._42.swingy.view.View;
 
@@ -20,37 +22,78 @@ public class GameController {
 
     private final View view;
     private final Validator validator;
-    private final HeroRepository repository;
+    private final GameRepository repository;
     private GameMap map;
     private Hero currentHero;
-    private List<Hero> heroList;
-    private final Random random = new Random();
-    private final BattleSimulator battleSimulator = new BattleSimulator(random);
+    private List<Hero> heroList = new ArrayList<>();
+    private final Random random;
+    private final BattleSimulator battleSimulator;
 
-    public GameController(View view, Validator validator, HeroRepository repository) {
+    public GameController(View view, Validator validator, GameRepository repository, Random random) {
         this.view = view;
         this.validator = validator;
         this.repository = repository;
+        this.random = random;
+        this.battleSimulator = new BattleSimulator(random);
     }
-
     public void run() {
-        heroList = repository.loadAll();
+        GameRepository.GameState state = repository.load();
+        heroList = state.roster();
+
         try {
-            while ((currentHero = mainMenu()) == null) {
-                view.displayMessage("No hero selected. Let's try again.");
+            Optional<String> activeName = state.activeHeroName();
+            if (activeName.isPresent()) {
+                currentHero = heroList.stream()
+                        .filter(h -> h.getName().equals(activeName.get()))
+                        .findFirst()
+                        .orElse(null);
+                if (currentHero == null) {
+                    view.displayError("Saved session references unknown hero '"
+                            + activeName.get() + "'; starting fresh.");
+                }
             }
-            int size = mapSizeFor(currentHero.getLevel());
-            map = new GameMap(size);
-            if (currentHero.getPosition() == null) {
-                currentHero.setPosition(map.center());
+
+            if (currentHero == null) {
+                while ((currentHero = mainMenu()) == null) {
+                    view.displayMessage("No hero selected. Let's try again.");
+                }
             }
-            map.placeHero(currentHero, currentHero.getPosition());
-            map.generateVillains(villainCountFor(size), currentHero.getLevel());
+
+            int expectedSize = mapSizeFor(currentHero.getLevel());
+            if (state.mapSize().isPresent() && state.mapSize().get() == expectedSize
+                    && !state.villains().isEmpty()) {
+                // Resume the saved map.
+                map = new GameMap(expectedSize, random);
+                currentHero.setPosition(currentHero.getPosition() == null
+                        ? map.center()
+                        : currentHero.getPosition());
+                map.placeHero(currentHero, currentHero.getPosition());
+                map.replaceVillains(state.villains());
+            } else {
+                // Fresh map (new hero, or saved map size mismatch — see note).
+                map = new GameMap(expectedSize, random);
+                if (currentHero.getPosition() == null) {
+                    currentHero.setPosition(map.center());
+                }
+                map.placeHero(currentHero, currentHero.getPosition());
+                map.generateVillains(villainCountFor(expectedSize), currentHero.getLevel());
+            }
+
             gameLoop();
         } finally {
             saveAndExit();
             view.close();
         }
+    }
+
+    private void saveAndExit() {
+        GameRepository.GameState state = new GameRepository.GameState(
+                heroList,
+                Optional.of(currentHero.getName()),
+                Optional.of(map.getSize()),
+                map.getVillains());
+        repository.save(state);
+        view.displayMessage("Your game has been saved.");
     }
 
     private int villainCountFor(int mapSize) {
@@ -87,11 +130,6 @@ public class GameController {
 
     private int mapSizeFor(int level) {
         return (level - 1) * 5 + 10 - (level % 2);
-    }
-
-    private void saveAndExit() {
-        repository.saveAll(heroList);
-        view.displayMessage("Your hero(es) have been saved");
     }
 
     private void handleMove(Direction dir) {

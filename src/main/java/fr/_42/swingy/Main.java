@@ -1,8 +1,9 @@
 package fr._42.swingy;
 
+import java.util.Random;
 import java.awt.GraphicsEnvironment;
 import fr._42.swingy.controller.GameController;
-import fr._42.swingy.persistence.HeroRepository;
+import fr._42.swingy.persistence.GameRepository;
 import fr._42.swingy.util.Constants;
 import fr._42.swingy.validation.Validator;
 import fr._42.swingy.view.View;
@@ -45,8 +46,9 @@ public final class Main {
             }
 
             Validator validator = createValidator();
-            HeroRepository repository = new HeroRepository(Constants.SAVE_FILE);
-            new GameController(view, validator, repository).run();
+            GameRepository repository = new GameRepository(Constants.SAVE_FILE);
+            Random random = new Random();
+            new GameController(view, validator, repository, random).run();
         } 
         catch (Exception e) {
             // Last-resort guard: never let a stack trace crash the jar silently
