@@ -53,6 +53,8 @@ public class HeroRepository {
         }
 
         List<Hero> heroes = new ArrayList<>();
+        // try-with-resources (introduced in Java 7). 
+        // The parentheses declare resources that Java will automatically close when the block exits
         try (BufferedReader reader = Files.newBufferedReader(saveFile, StandardCharsets.UTF_8)) {
             String line;
             int lineNumber = 0;
@@ -85,7 +87,9 @@ public class HeroRepository {
     public void saveAll(List<Hero> heroes) {
         Path temp = saveFile.resolveSibling(saveFile.getFileName() + ".tmp");
         try {
+            // make sure the folders exist
             Files.createDirectories(saveFile.toAbsolutePath().getParent());
+            
             try (BufferedWriter writer = Files.newBufferedWriter(temp, StandardCharsets.UTF_8)) {
                 writer.write("# Swingy save file — do not edit by hand");
                 writer.newLine();

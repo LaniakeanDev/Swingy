@@ -47,7 +47,8 @@ public final class Main {
             Validator validator = createValidator();
             HeroRepository repository = new HeroRepository(Constants.SAVE_FILE);
             new GameController(view, validator, repository).run();
-        } catch (Exception e) {
+        } 
+        catch (Exception e) {
             // Last-resort guard: never let a stack trace crash the jar silently
             System.err.println("[swingy] Fatal error: " + e.getMessage());
             e.printStackTrace();
