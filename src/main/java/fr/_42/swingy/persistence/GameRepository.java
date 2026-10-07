@@ -1,167 +1,91 @@
 package fr._42.swingy.persistence;
 
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.JsonDeserializer;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.JsonSerializer;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.module.SimpleModule;
 import fr._42.swingy.model.entity.Artifact;
 import fr._42.swingy.model.entity.Hero;
 import fr._42.swingy.model.entity.Villain;
 import fr._42.swingy.model.enums.ArtifactType;
 import fr._42.swingy.model.enums.HeroClass;
 import fr._42.swingy.model.map.Position;
+import fr._42.swingy.persistence.dto.ArtifactDto;
+import fr._42.swingy.persistence.dto.HeroDto;
+import fr._42.swingy.persistence.dto.VillainDto;
 
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 
-/**
- * Persists the full game state: the hero roster, the currently active hero,
- * and the villains on that hero's map.
- *
- * <p>Format (one record per line, fields separated by '|'):</p>
- * <pre>
- *   # comment
- *   VERSION|1
- *   S|&lt;activeHeroName&gt;|&lt;mapSize&gt;        # session header (optional if no session)
- *   H|&lt;name&gt;|&lt;class&gt;|&lt;level&gt;|&lt;xp&gt;|&lt;hp&gt;|&lt;x&gt;|&lt;y&gt;|&lt;artifacts&gt;
- *   V|&lt;name&gt;|&lt;hp&gt;|&lt;atk&gt;|&lt;def&gt;|&lt;x&gt;|&lt;y&gt;
- * </pre>
- *
- * <p>The file is written atomically: to a temp file, then moved into place.</p>
- */
 public class GameRepository {
 
-    private static final String FIELD_SEP     = "|";
-    private static final String ARTIFACT_SEP  = ",";
-    private static final String ARTIFACT_KV   = ":";
-    private static final int    HERO_FIELDS   = 9;  // H + 8 hero fields
-    private static final int    VILLAIN_FIELDS = 7; // V + 6 villain fields
-    private static final int    SESSION_FIELDS = 3; // S + 2 session fields
-    private static final int    VERSION        = 1;
+    private static final int CURRENT_VERSION = 1;
 
     private final Path saveFile;
+    private final ObjectMapper mapper;
 
     public GameRepository(String fileName) {
         this.saveFile = Paths.get(fileName).toAbsolutePath();
+
+        SimpleModule module = new SimpleModule();
+        module.addSerializer(Hero.class,    new HeroSerializer());
+        module.addDeserializer(Hero.class,  new HeroDeserializer());
+        module.addSerializer(Villain.class,    new VillainSerializer());
+        module.addDeserializer(Villain.class,  new VillainDeserializer());
+
+        this.mapper = new ObjectMapper()
+                .registerModule(module)
+                .enable(SerializationFeature.INDENT_OUTPUT);
     }
+
 
     /* ------------------------------------------------------------------ */
     /*  Public API                                                         */
     /* ------------------------------------------------------------------ */
 
-    /**
-     * Everything we persist. `session` is empty for a fresh install or a
-     * save written before the first move — the controller then centers the
-     * hero on a freshly-generated map.
-     */
-    public record GameState(
-            List<Hero> roster,
-            Optional<String> activeHeroName,
-            Optional<Integer> mapSize,
-            List<Villain> villains
-    ) {}
-
     public GameState load() {
-        if (!Files.exists(saveFile)) {
-            return new GameState(new ArrayList<>(), Optional.empty(),
-                                 Optional.empty(), new ArrayList<>());
+        if (!Files.exists(saveFile) || isEmpty(saveFile)) {
+            return emptyState();
         }
 
-        List<Hero> heroes = new ArrayList<>();
-        List<Villain> villains = new ArrayList<>();
-        String activeHeroName = null;
-        Integer mapSize = null;
-        boolean versionSeen = false;
-
-        try (BufferedReader reader = Files.newBufferedReader(saveFile, StandardCharsets.UTF_8)) {
-            String line;
-            int lineNumber = 0;
-            while ((line = reader.readLine()) != null) {
-                lineNumber++;
-                line = line.trim();
-                if (line.isEmpty() || line.startsWith("#")) continue;
-
-                try {
-                    String[] parts = line.split("\\" + FIELD_SEP, -1);
-                    switch (parts[0]) {
-                        case "VERSION" -> {
-                            int fileVersion = Integer.parseInt(parts[1]);
-                            if (fileVersion != VERSION) {
-                                throw new IllegalArgumentException(
-                                    "unsupported save-file version " + fileVersion
-                                    + " (expected " + VERSION + ")");
-                            }
-                            versionSeen = true;
-                        }
-                        case "S" -> {
-                            if (parts.length != SESSION_FIELDS) {
-                                throw new IllegalArgumentException(
-                                    "session record needs " + SESSION_FIELDS + " fields");
-                            }
-                            activeHeroName = parts[1];
-                            mapSize = Integer.parseInt(parts[2]);
-                        }
-                        case "H" -> heroes.add(parseHero(parts));
-                        case "V" -> villains.add(parseVillain(parts));
-                        default -> throw new IllegalArgumentException(
-                            "unknown record type '" + parts[0] + "'");
-                    }
-                } catch (RuntimeException e) {
-                    System.err.printf(
-                        "[GameRepository] Skipping malformed line %d in %s: %s%n",
-                        lineNumber, saveFile.getFileName(), e.getMessage());
-                }
-            }
+        JsonNode root;
+        try {
+            root = mapper.readTree(saveFile.toFile());
         } catch (IOException e) {
             throw new RepositoryException("Failed to read save file: " + saveFile, e);
         }
 
-        if (!versionSeen && (!heroes.isEmpty() || !villains.isEmpty())) {
-            // Old unversioned file: warn but don't fail.
-            System.err.println("[GameRepository] Warning: save file has no VERSION line; "
-                    + "assuming version " + VERSION);
+        int version = root.path("version").asInt(0);
+        if (version != CURRENT_VERSION) {
+            throw new RepositoryException(
+                    "Unsupported save-file version " + version
+                    + " (expected " + CURRENT_VERSION + ")");
         }
 
-        return new GameState(
-                heroes,
-                Optional.ofNullable(activeHeroName),
-                Optional.ofNullable(mapSize),
-                villains);
+        GameState state = new GameState();
+        state.version  = version;
+        state.session  = readSession(root.path("session"));
+        state.roster   = readRoster(root.path("roster"));
+        state.villains = readVillains(root.path("villains"));
+        return state;
     }
 
     public void save(GameState state) {
         Path temp = saveFile.resolveSibling(saveFile.getFileName() + ".tmp");
         try {
             Files.createDirectories(saveFile.toAbsolutePath().getParent());
-
-            try (BufferedWriter writer = Files.newBufferedWriter(temp, StandardCharsets.UTF_8)) {
-                writer.write("# Swingy save file — do not edit by hand");
-                writer.newLine();
-                writer.write("VERSION" + FIELD_SEP + VERSION);
-                writer.newLine();
-
-                if (state.activeHeroName().isPresent() && state.mapSize().isPresent()) {
-                    writer.write("S" + FIELD_SEP
-                            + sanitize(state.activeHeroName().get()) + FIELD_SEP
-                            + state.mapSize().get());
-                    writer.newLine();
-                }
-
-                for (Hero h : state.roster()) {
-                    writer.write(serializeHero(h));
-                    writer.newLine();
-                }
-                for (Villain v : state.villains()) {
-                    writer.write(serializeVillain(v));
-                    writer.newLine();
-                }
-            }
+            mapper.writeValue(temp.toFile(), state);
             Files.move(temp, saveFile,
                     StandardCopyOption.REPLACE_EXISTING,
                     StandardCopyOption.ATOMIC_MOVE);
@@ -171,128 +95,241 @@ public class GameRepository {
     }
 
     /* ------------------------------------------------------------------ */
-    /*  Serialization                                                      */
+    /*  Reading helpers                                                    */
     /* ------------------------------------------------------------------ */
-    private String serializeHero(Hero hero) {
-        StringBuilder sb = new StringBuilder("H");
-        sb.append(FIELD_SEP).append(sanitize(hero.getName()));
-        sb.append(FIELD_SEP).append(hero.getHeroClass().name());
-        sb.append(FIELD_SEP).append(hero.getLevel());
-        sb.append(FIELD_SEP).append(hero.getExperience());
-        sb.append(FIELD_SEP).append(hero.getCurrentHitPoints());
 
-        Position pos = hero.getPosition();
-        if (pos != null) {
-            sb.append(FIELD_SEP).append(pos.getX());
-            sb.append(FIELD_SEP).append(pos.getY());
-        } else {
-            sb.append(FIELD_SEP).append("-1");
-            sb.append(FIELD_SEP).append("-1");
+    private GameState.Session readSession(JsonNode node) {
+        if (node == null || node.isMissingNode() || node.isNull()) return null;
+        String activeHero = node.path("activeHero").asText(null);
+        int mapSize = node.path("mapSize").asInt(0);
+        if (activeHero == null || activeHero.isBlank() || mapSize <= 0) {
+            System.err.println("[GameRepository] Ignoring malformed session block");
+            return null;
         }
-
-        // Artifacts column — always preceded by a separator, even if empty.
-        sb.append(FIELD_SEP);
-
-        List<Artifact> artifacts = hero.getArtifacts();
-        for (int i = 0; i < artifacts.size(); i++) {
-            Artifact a = artifacts.get(i);
-            sb.append(a.getType().name()).append(ARTIFACT_KV)
-            .append(a.getValue()).append(ARTIFACT_KV)
-            .append(a.getName());
-            if (i < artifacts.size() - 1) sb.append(ARTIFACT_SEP);
-        }
-        return sb.toString();
+        return new GameState.Session(activeHero, mapSize);
     }
-    private Hero parseHero(String[] parts) {
-        if (parts.length != HERO_FIELDS) {
-            throw new IllegalArgumentException(
-                "hero record needs " + HERO_FIELDS + " fields, got " + parts.length);
+
+    private List<Hero> readRoster(JsonNode node) {
+        List<Hero> heroes = new ArrayList<>();
+        if (node == null || !node.isArray()) return heroes;
+        for (JsonNode heroNode : node) {
+            try {
+                heroes.add(mapper.treeToValue(heroNode, Hero.class));
+            } catch (Exception e) {
+                System.err.println("[GameRepository] Skipping malformed hero: "
+                        + e.getMessage());
+            }
         }
-        String     name      = parts[1];
-        HeroClass  heroClass = HeroClass.valueOf(parts[2]);
-        int        level     = parsePositiveInt(parts[3], "level");
-        long       xp        = parseNonNegativeLong(parts[4], "experience");
-        int        hp        = parseNonNegativeInt(parts[5], "hitPoints");
-        int        x         = Integer.parseInt(parts[6]);
-        int        y         = Integer.parseInt(parts[7]);
-        List<Artifact> artifacts = parseArtifacts(parts[8]);
+        return heroes;
+    }
 
-        Position position = (x < 0 || y < 0) ? null : new Position(x, y);
+    private List<Villain> readVillains(JsonNode node) {
+        List<Villain> villains = new ArrayList<>();
+        if (node == null || !node.isArray()) return villains;
+        for (JsonNode villainNode : node) {
+            try {
+                villains.add(mapper.treeToValue(villainNode, Villain.class));
+            } catch (Exception e) {
+                System.err.println("[GameRepository] Skipping malformed villain: "
+                        + e.getMessage());
+            }
+        }
+        return villains;
+    }
 
+    /* ------------------------------------------------------------------ */
+    /*  Domain <-> DTO conversion                                          */
+    /* ------------------------------------------------------------------ */
+
+    private static HeroDto toDto(Hero h) {
+        HeroDto d = new HeroDto();
+        d.name = h.getName();
+        d.heroClass = h.getHeroClass().name();
+        d.level = h.getLevel();
+        d.experience = h.getExperience();
+        d.currentHitPoints = h.getCurrentHitPoints();
+        Position p = h.getPosition();
+        d.x = (p != null) ? p.getX() : null;
+        d.y = (p != null) ? p.getY() : null;
+        d.artifacts = h.getArtifacts().stream().map(GameRepository::toDto).toList();
+        return d;
+    }
+
+    private static ArtifactDto toDto(Artifact a) {
+        ArtifactDto d = new ArtifactDto();
+        d.type = a.getType().name();
+        d.value = a.getValue();
+        d.name = a.getName();
+        return d;
+    }
+
+    private static VillainDto toDto(Villain v) {
+        VillainDto d = new VillainDto();
+        d.name = v.getName();
+        d.hp = v.getHitPoints();
+        d.attack = v.getAttack();
+        d.defense = v.getDefense();
+        d.x = v.getPosition().getX();
+        d.y = v.getPosition().getY();
+        return d;
+    }
+
+    private static Hero fromDto(HeroDto d) {
+        String name = requireText(d.name, "hero name");
+        HeroClass hc = parseHeroClass(d.heroClass);
+        if (d.level <= 0) throw new IllegalArgumentException("level must be > 0, got " + d.level);
+        if (d.experience < 0) throw new IllegalArgumentException("experience must be >= 0");
+        Position position = (d.x == null || d.y == null || d.x < 0 || d.y < 0)
+                ? null : new Position(d.x, d.y);
+        List<Artifact> artifacts = new ArrayList<>();
+        if (d.artifacts != null) {
+            for (ArtifactDto ad : d.artifacts) artifacts.add(fromDto(ad));
+        }
         return new Hero.HeroBuilder()
                 .name(name)
-                .heroClass(heroClass)
-                .level(level)
-                .experience(xp)
-                .currentHitPoints(hp)
+                .heroClass(hc)
+                .level(d.level)
+                .experience(d.experience)
+                .currentHitPoints(d.currentHitPoints)
                 .position(position)
                 .artifacts(artifacts)
                 .build();
     }
 
-    private String serializeVillain(Villain v) {
-        Position p = v.getPosition();
-        return "V" + FIELD_SEP + sanitize(v.getName())
-             + FIELD_SEP + v.getHitPoints()
-             + FIELD_SEP + v.getAttack()
-             + FIELD_SEP + v.getDefense()
-             + FIELD_SEP + p.getX()
-             + FIELD_SEP + p.getY();
+    private static Artifact fromDto(ArtifactDto d) {
+        ArtifactType type = parseArtifactType(d.type);
+        String name = requireText(d.name, "artifact name");
+        return new Artifact(type, d.value, name);
     }
 
-    private Villain parseVillain(String[] parts) {
-        if (parts.length != VILLAIN_FIELDS) {
-            throw new IllegalArgumentException(
-                "villain record needs " + VILLAIN_FIELDS + " fields, got " + parts.length);
+    private static Villain fromDto(VillainDto d) {
+        String name = requireText(d.name, "villain name");
+        if (d.hp <= 0) {
+            throw new IllegalArgumentException("villain hp must be > 0, got " + d.hp);
         }
-        String name = parts[1];
-        int hp    = parsePositiveInt(parts[2], "villain hitPoints");
-        int atk   = parsePositiveInt(parts[3], "villain attack");
-        int def   = parseNonNegativeInt(parts[4], "villain defense");
-        int x     = Integer.parseInt(parts[5]);
-        int y     = Integer.parseInt(parts[6]);
-        return new Villain(name, hp, atk, def, new Position(x, y));
+        if (d.attack <= 0) {
+            throw new IllegalArgumentException("villain attack must be > 0, got " + d.attack);
+        }
+        if (d.defense < 0) {
+            throw new IllegalArgumentException("villain defense must be >= 0, got " + d.defense);
+        }
+        return new Villain(name, d.hp, d.attack, d.defense, new Position(d.x, d.y));
+    }
+    /* ------------------------------------------------------------------ */
+    /*  Jackson bindings                                                   */
+    /* ------------------------------------------------------------------ */
+
+    private static final class HeroSerializer extends JsonSerializer<Hero> {
+        @Override
+        public void serialize(Hero h, JsonGenerator gen, SerializerProvider sp)
+                throws IOException {
+            gen.writeObject(toDto(h));
+        }
     }
 
-    private List<Artifact> parseArtifacts(String field) {
-        if (field == null || field.isBlank()) return Collections.emptyList();
-        List<Artifact> artifacts = new ArrayList<>();
-        for (String token : field.split(ARTIFACT_SEP)) {
-            String[] parts = token.split(ARTIFACT_KV, 3);
-            if (parts.length != 3) {
-                throw new IllegalArgumentException("bad artifact token: '" + token + "'");
+    private static final class HeroDeserializer extends JsonDeserializer<Hero> {
+        @Override
+        public Hero deserialize(JsonParser p, DeserializationContext ctx)
+                throws IOException {
+            return fromDto(p.readValueAs(HeroDto.class));
+        }
+    }
+
+    private static final class VillainSerializer extends JsonSerializer<Villain> {
+        @Override
+        public void serialize(Villain v, JsonGenerator gen, SerializerProvider sp)
+                throws IOException {
+            gen.writeObject(toDto(v));
+        }
+    }
+
+    private static final class VillainDeserializer extends JsonDeserializer<Villain> {
+        @Override
+        public Villain deserialize(JsonParser p, DeserializationContext ctx)
+                throws IOException {
+            return fromDto(p.readValueAs(VillainDto.class));
+        }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  Field validators and parsers                                       */
+    /* ------------------------------------------------------------------ */
+
+    private static String requireText(String value, String what) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(what + " is blank");
+        }
+        return value;
+    }
+
+    private static HeroClass parseHeroClass(String name) {
+        if (name == null) throw new IllegalArgumentException("hero class is null");
+        try {
+            return HeroClass.valueOf(name);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("unknown hero class '" + name + "'");
+        }
+    }
+
+    private static ArtifactType parseArtifactType(String name) {
+        if (name == null) throw new IllegalArgumentException("artifact type is null");
+        try {
+            return ArtifactType.valueOf(name);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("unknown artifact type '" + name + "'");
+        }
+    }
+
+    private static boolean isEmpty(Path file) {
+        try {
+            return Files.size(file) == 0;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    private static GameState emptyState() {
+        GameState state = new GameState();
+        state.version  = CURRENT_VERSION;
+        state.session  = null;
+        state.roster   = new ArrayList<>();
+        state.villains = new ArrayList<>();
+        return state;
+    }
+
+
+
+
+    /**
+     * Everything the repository persists. A plain mutable POJO — this is a
+     * serialization artifact, not a domain object.
+     *
+     * <p>Contract: {@code roster} and {@code villains} are always mutable,
+     * freshly-allocated lists — never {@code List.of()} — because the
+     * controller adds heroes to the roster during a session.</p>
+     *
+     * <p>Must be {@code static} so it can be instantiated without an
+     * enclosing {@code GameRepository} instance.</p>
+     */
+    public static class GameState {
+
+        public int version = 1;
+        public Session session;             // null when there is no active session
+        public List<Hero> roster = new ArrayList<>();
+        public List<Villain> villains = new ArrayList<>();
+
+        /** Active hero name and the size of the map they're playing on. */
+        public static class Session {
+            public String activeHero;
+            public int mapSize;
+
+            public Session() {}
+
+            public Session(String activeHero, int mapSize) {
+                this.activeHero = activeHero;
+                this.mapSize = mapSize;
             }
-            artifacts.add(new Artifact(
-                    ArtifactType.valueOf(parts[0]),
-                    Integer.parseInt(parts[1]),
-                    parts[2]));
         }
-        return artifacts;
     }
 
-    /* ------------------------------------------------------------------ */
-    /*  Helpers                                                            */
-    /* ------------------------------------------------------------------ */
-
-    private String sanitize(String name) {
-        return name.replace(FIELD_SEP, "_").replace("\n", " ").replace("\r", " ");
-    }
-
-    private int parsePositiveInt(String s, String field) {
-        int v = Integer.parseInt(s);
-        if (v <= 0) throw new IllegalArgumentException(field + " must be > 0, got " + v);
-        return v;
-    }
-
-    private long parseNonNegativeLong(String s, String field) {
-        long v = Long.parseLong(s);
-        if (v < 0) throw new IllegalArgumentException(field + " must be >= 0, got " + v);
-        return v;
-    }
-
-    private int parseNonNegativeInt(String s, String field) {
-        int v = Integer.parseInt(s);
-        if (v < 0) throw new IllegalArgumentException(field + " must be >= 0, got " + v);
-        return v;
-    }
 }

@@ -15,6 +15,7 @@ import fr._42.swingy.model.map.Position;
 import fr._42.swingy.model.battle.BattleReport;
 import fr._42.swingy.model.battle.BattleSimulator;
 import fr._42.swingy.persistence.GameRepository;
+import fr._42.swingy.persistence.GameRepository.GameState;
 import fr._42.swingy.validation.Validator;
 import fr._42.swingy.view.View;
 
@@ -36,62 +37,82 @@ public class GameController {
         this.random = random;
         this.battleSimulator = new BattleSimulator(random);
     }
+
     public void run() {
-        GameRepository.GameState state = repository.load();
-        heroList = state.roster();
+        GameState state = repository.load();
+        heroList = new ArrayList<>(state.roster);
 
         try {
-            Optional<String> activeName = state.activeHeroName();
-            if (activeName.isPresent()) {
-                currentHero = heroList.stream()
-                        .filter(h -> h.getName().equals(activeName.get()))
-                        .findFirst()
-                        .orElse(null);
-                if (currentHero == null) {
-                    view.displayError("Saved session references unknown hero '"
-                            + activeName.get() + "'; starting fresh.");
-                }
-            }
-
-            if (currentHero == null) {
-                while ((currentHero = mainMenu()) == null) {
-                    view.displayMessage("No hero selected. Let's try again.");
-                }
+            while ((currentHero = mainMenu()) == null) {
+                view.displayMessage("No hero selected. Let's try again.");
             }
 
             int expectedSize = mapSizeFor(currentHero.getLevel());
-            if (state.mapSize().isPresent() && state.mapSize().get() == expectedSize
-                    && !state.villains().isEmpty()) {
-                // Resume the saved map.
-                map = new GameMap(expectedSize, random);
-                currentHero.setPosition(currentHero.getPosition() == null
-                        ? map.center()
-                        : currentHero.getPosition());
-                map.placeHero(currentHero, currentHero.getPosition());
-                map.replaceVillains(state.villains());
+
+            // Resume only if the saved session is for this exact hero and
+            // the map size on disk still matches what this hero's level implies.
+            boolean canResume = state.session != null
+                    && state.session.activeHero.equals(currentHero.getName())
+                    && state.session.mapSize == expectedSize;
+
+            map = new GameMap(expectedSize, random);
+            if (currentHero.getPosition() == null) {
+                currentHero.setPosition(map.center());
+            }
+            map.placeHero(currentHero, currentHero.getPosition());
+
+            if (canResume) {
+                map.replaceVillains(state.villains);
+                view.displayMessage("Resuming saved session.");
             } else {
-                // Fresh map (new hero, or saved map size mismatch — see note).
-                map = new GameMap(expectedSize, random);
-                if (currentHero.getPosition() == null) {
-                    currentHero.setPosition(map.center());
-                }
-                map.placeHero(currentHero, currentHero.getPosition());
                 map.generateVillains(villainCountFor(expectedSize), currentHero.getLevel());
             }
 
             gameLoop();
+        } catch (Exception e) {
+            view.displayError("Fatal error: " + e.getMessage());
+            e.printStackTrace();
         } finally {
-            saveAndExit();
+            if (map != null && currentHero != null) {
+                saveAndExit();
+            } else if (heroList != null && !heroList.isEmpty()) {
+                saveRosterOnly();
+            }
             view.close();
         }
     }
 
+    private void saveRosterOnly() {
+        GameRepository.GameState state = new GameRepository.GameState();
+        state.roster = heroList;
+        state.villains =  new ArrayList<>();
+        state.session = null;
+        repository.save(state);
+        view.displayMessage("Your hero(es) have been saved.");
+    }
+
     private void saveAndExit() {
-        GameRepository.GameState state = new GameRepository.GameState(
-                heroList,
-                Optional.of(currentHero.getName()),
-                Optional.of(map.getSize()),
-                map.getVillains());
+        if (map == null) {
+            // Nothing to save — we never got far enough to build a map.
+            // Still flush the roster so any hero created during mainMenu survives.
+            if (heroList != null && currentHero != null) {
+                GameRepository.GameState state = new GameRepository.GameState();
+                state.roster = heroList;
+                state.villains = new ArrayList<>();
+                state.session = null;
+                repository.save(state);
+                view.displayMessage("Your hero(es) have been saved.");
+            }
+            return;
+        }
+
+        GameRepository.GameState state = new GameRepository.GameState();
+        state.roster = heroList;
+        state.villains = map.getVillains();
+        state.session = new GameRepository.GameState.Session(
+                currentHero.getName(),
+                map.getSize());
+
         repository.save(state);
         view.displayMessage("Your game has been saved.");
     }
