@@ -86,7 +86,6 @@ public class GameController {
     private void saveRosterOnly() {
         GameState state = new GameState();
         state.roster = heroList;
-        state.activeHero = null;
         state.sessions = new java.util.LinkedHashMap<>();
         repository.save(state);
         view.displayMessage("Your hero(es) have been saved.");
@@ -99,7 +98,6 @@ public class GameController {
             if (heroList != null && currentHero != null) {
                 GameState state = new GameState();
                 state.roster = heroList;
-                state.activeHero = null;
                 state.sessions = new java.util.LinkedHashMap<>();
                 repository.save(state);
                 view.displayMessage("Your hero(es) have been saved.");
@@ -109,7 +107,6 @@ public class GameController {
 
         GameState state = new GameState();
         state.roster = heroList;
-        state.activeHero = currentHero.getName();
         state.sessions = new java.util.LinkedHashMap<>();
         state.sessions.put(
                 currentHero.getName(),

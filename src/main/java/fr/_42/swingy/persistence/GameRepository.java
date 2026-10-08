@@ -68,17 +68,11 @@ public class GameRepository {
         }
 
         GameState state = new GameState();
-        state.activeHero = readActiveHero(root.path("activeHero"));
         state.roster   = readRoster(root.path("roster"));
         state.sessions = readSessions(root.path("sessions"));
 
         // Drop sessions whose hero is no longer in the roster.
         state.sessions.keySet().removeIf(name -> findHero(state.roster, name) == null);
-
-        // Drop a dangling activeHero reference.
-        if (state.activeHero != null && findHero(state.roster, state.activeHero) == null) {
-            state.activeHero = null;
-        }
 
         return state;
     }
@@ -99,12 +93,6 @@ public class GameRepository {
     /* ------------------------------------------------------------------ */
     /*  Reading helpers                                                    */
     /* ------------------------------------------------------------------ */
-
-    private String readActiveHero(JsonNode node) {
-        if (node == null || node.isMissingNode() || node.isNull()) return null;
-        String name = node.asText(null);
-        return (name == null || name.isBlank()) ? null : name;
-    }
 
     private List<Hero> readRoster(JsonNode node) {
         List<Hero> heroes = new ArrayList<>();
@@ -337,7 +325,6 @@ public class GameRepository {
 
     private static GameState emptyState() {
         GameState state = new GameState();
-        state.activeHero = null;
         state.roster     = new ArrayList<>();
         state.sessions   = new LinkedHashMap<>();
         return state;
@@ -358,9 +345,6 @@ public class GameRepository {
      * enclosing {@code GameRepository} instance.</p>
      */
     public static class GameState {
-
-        /** Name of the hero currently being played, or {@code null} when none. */
-        public String activeHero;
 
         public List<Hero> roster = new ArrayList<>();
 
