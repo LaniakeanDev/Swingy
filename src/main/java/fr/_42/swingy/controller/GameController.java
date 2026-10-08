@@ -16,6 +16,7 @@ import fr._42.swingy.model.battle.BattleReport;
 import fr._42.swingy.model.battle.BattleSimulator;
 import fr._42.swingy.persistence.GameRepository;
 import fr._42.swingy.persistence.GameRepository.GameState;
+import fr._42.swingy.persistence.GameRepository.GameState.Session;
 import fr._42.swingy.validation.Validator;
 import fr._42.swingy.view.View;
 
@@ -49,11 +50,11 @@ public class GameController {
 
             int expectedSize = mapSizeFor(currentHero.getLevel());
 
-            // Resume only if the saved session is for this exact hero and
-            // the map size on disk still matches what this hero's level implies.
-            boolean canResume = state.session != null
-                    && state.session.activeHero.equals(currentHero.getName())
-                    && state.session.mapSize == expectedSize;
+            // Resume only if this hero has a saved session AND the map size
+            // on disk still matches what this hero's level implies.
+            Session saved = state.sessions.get(currentHero.getName());
+            boolean canResume = saved != null
+                    && saved.mapSize == expectedSize;
 
             map = new GameMap(expectedSize, random);
             if (currentHero.getPosition() == null) {
@@ -62,7 +63,7 @@ public class GameController {
             map.placeHero(currentHero, currentHero.getPosition());
 
             if (canResume) {
-                map.replaceVillains(state.villains);
+                map.replaceVillains(saved.villains);
                 view.displayMessage("Resuming saved session.");
             } else {
                 map.generateVillains(villainCountFor(expectedSize), currentHero.getLevel());
@@ -83,10 +84,10 @@ public class GameController {
     }
 
     private void saveRosterOnly() {
-        GameRepository.GameState state = new GameRepository.GameState();
+        GameState state = new GameState();
         state.roster = heroList;
-        state.villains =  new ArrayList<>();
-        state.session = null;
+        state.activeHero = null;
+        state.sessions = new java.util.LinkedHashMap<>();
         repository.save(state);
         view.displayMessage("Your hero(es) have been saved.");
     }
@@ -96,22 +97,23 @@ public class GameController {
             // Nothing to save — we never got far enough to build a map.
             // Still flush the roster so any hero created during mainMenu survives.
             if (heroList != null && currentHero != null) {
-                GameRepository.GameState state = new GameRepository.GameState();
+                GameState state = new GameState();
                 state.roster = heroList;
-                state.villains = new ArrayList<>();
-                state.session = null;
+                state.activeHero = null;
+                state.sessions = new java.util.LinkedHashMap<>();
                 repository.save(state);
                 view.displayMessage("Your hero(es) have been saved.");
             }
             return;
         }
 
-        GameRepository.GameState state = new GameRepository.GameState();
+        GameState state = new GameState();
         state.roster = heroList;
-        state.villains = map.getVillains();
-        state.session = new GameRepository.GameState.Session(
+        state.activeHero = currentHero.getName();
+        state.sessions = new java.util.LinkedHashMap<>();
+        state.sessions.put(
                 currentHero.getName(),
-                map.getSize());
+                new Session(map.getSize(), map.getVillains()));
 
         repository.save(state);
         view.displayMessage("Your game has been saved.");

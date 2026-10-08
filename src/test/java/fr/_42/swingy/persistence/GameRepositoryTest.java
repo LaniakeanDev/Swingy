@@ -22,6 +22,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -72,22 +73,21 @@ class GameRepositoryTest {
         return new Villain("Orc Warrior", 70, 10, 5, new Position(x, y));
     }
 
-    /** Build a state with a roster but no active session. */
+    /** Build a state with a roster but no active hero and no sessions. */
     private static GameState rosterOnly(List<Hero> roster) {
         GameState s = new GameState();
-        s.roster = roster;
-        s.villains = List.of();
-        s.session = null;
+        s.roster = new ArrayList<>(roster);
+        s.activeHero = null;
+        s.sessions = new java.util.LinkedHashMap<>();
         return s;
     }
 
-    /** Build a state with an active session. */
+    /** Build a state with a single active session for the given hero. */
     private static GameState session(
             List<Hero> roster, String activeHero, int mapSize, List<Villain> villains) {
-        GameState s = new GameState();
-        s.roster = roster;
-        s.villains = villains;
-        s.session = new Session(activeHero, mapSize);
+        GameState s = rosterOnly(roster);
+        s.activeHero = activeHero;
+        s.sessions.put(activeHero, new Session(mapSize, new ArrayList<>(villains)));
         return s;
     }
 
@@ -187,8 +187,8 @@ class GameRepositoryTest {
 
             GameState state = repo.load();
             assertThat(state.roster).isEmpty();
-            assertThat(state.session).isNull();
-            assertThat(state.villains).isEmpty();
+            assertThat(state.activeHero).isNull();
+            assertThat(state.sessions).isEmpty();
             assertThat(saveFile()).exists();
         }
 
@@ -252,12 +252,17 @@ class GameRepositoryTest {
     }
 
     /* ================================================================== */
-    /*  Villain round-trip                                                 */
+    /*  Villain round-trip (per session)                                   */
     /* ================================================================== */
 
     @Nested
     @DisplayName("villain round-trip")
     class VillainRoundTrip {
+
+        private List<Villain> villainsOf(GameState state, String hero) {
+            Session s = state.sessions.get(hero);
+            return (s == null) ? null : s.villains;
+        }
 
         @Test
         void singleVillainSurvivesSaveLoad() {
@@ -266,8 +271,9 @@ class GameRepositoryTest {
             repo().save(session(List.of(fullHero()), "Aria", 11, List.of(original)));
             GameState loaded = repo().load();
 
-            assertThat(loaded.villains).hasSize(1);
-            Villain v = loaded.villains.get(0);
+            List<Villain> villains = villainsOf(loaded, "Aria");
+            assertThat(villains).hasSize(1);
+            Villain v = villains.get(0);
             assertThat(v.getName()).isEqualTo("Orc Warrior");
             assertThat(v.getHitPoints()).isEqualTo(70);
             assertThat(v.getAttack()).isEqualTo(10);
@@ -282,7 +288,7 @@ class GameRepositoryTest {
             repo().save(session(List.of(fullHero()), "Aria", 11, villains));
             GameState loaded = repo().load();
 
-            assertThat(loaded.villains)
+            assertThat(villainsOf(loaded, "Aria"))
                     .extracting(Villain::getName,
                                 Villain::getPosition,
                                 Villain::getHitPoints,
@@ -299,10 +305,11 @@ class GameRepositoryTest {
             repo().save(session(List.of(fullHero()), "Aria", 11, List.of()));
             GameState loaded = repo().load();
 
-            assertThat(loaded.villains).isEmpty();
-            assertThat(loaded.session).isNotNull();
-            assertThat(loaded.session.activeHero).isEqualTo("Aria");
-            assertThat(loaded.session.mapSize).isEqualTo(11);
+            Session s = loaded.sessions.get("Aria");
+            assertThat(s).isNotNull();
+            assertThat(s.villains).isEmpty();
+            assertThat(s.mapSize).isEqualTo(11);
+            assertThat(loaded.activeHero).isEqualTo("Aria");
         }
 
         @Test
@@ -310,7 +317,7 @@ class GameRepositoryTest {
             Villain v = rat(0, 0);
             repo().save(session(List.of(fullHero()), "Aria", 5, List.of(v)));
 
-            assertThat(repo().load().villains.get(0).getPosition())
+            assertThat(villainsOf(repo().load(), "Aria").get(0).getPosition())
                     .isEqualTo(new Position(0, 0));
         }
 
@@ -319,7 +326,7 @@ class GameRepositoryTest {
             Villain v = new Villain("Minotaur Lord", 160, 17, 12, new Position(3, 3));
             repo().save(session(List.of(fullHero()), "Aria", 20, List.of(v)));
 
-            assertThat(repo().load().villains.get(0).getName())
+            assertThat(villainsOf(repo().load(), "Aria").get(0).getName())
                     .isEqualTo("Minotaur Lord");
         }
 
@@ -331,16 +338,38 @@ class GameRepositoryTest {
             }
             repo().save(session(List.of(fullHero()), "Aria", 20, villains));
 
-            assertThat(repo().load().villains)
+            assertThat(villainsOf(repo().load(), "Aria"))
                     .hasSize(15)
                     .extracting(Villain::getPosition)
                     .containsExactlyElementsOf(
                             villains.stream().map(Villain::getPosition).toList());
         }
+
+        @Test
+        void eachHeroOwnsItsOwnVillainList() {
+            GameState s = new GameState();
+            s.roster = new ArrayList<>(List.of(
+                    minimalHero("Aria"), minimalHero("Bronn")));
+            s.activeHero = "Aria";
+            s.sessions.put("Aria",  new Session(11, List.of(rat(2, 4), orc(7, 8))));
+            s.sessions.put("Bronn", new Session(9,  List.of(rat(1, 1))));
+
+            repo().save(s);
+            GameState loaded = repo().load();
+
+            assertThat(villainsOf(loaded, "Aria"))
+                    .extracting(Villain::getName)
+                    .containsExactly("Giant Rat", "Orc Warrior");
+            assertThat(villainsOf(loaded, "Bronn"))
+                    .extracting(Villain::getName)
+                    .containsExactly("Giant Rat");
+            assertThat(villainsOf(loaded, "Aria"))
+                    .isNotSameAs(villainsOf(loaded, "Bronn"));
+        }
     }
 
     /* ================================================================== */
-    /*  Session header                                                     */
+    /*  Session header and multi-session map                               */
     /* ================================================================== */
 
     @Nested
@@ -352,18 +381,19 @@ class GameRepositoryTest {
             repo().save(session(List.of(fullHero()), "Aria", 11, List.of(rat(1, 1))));
             GameState loaded = repo().load();
 
-            assertThat(loaded.session).isNotNull();
-            assertThat(loaded.session.activeHero).isEqualTo("Aria");
-            assertThat(loaded.session.mapSize).isEqualTo(11);
+            assertThat(loaded.activeHero).isEqualTo("Aria");
+            Session s = loaded.sessions.get("Aria");
+            assertThat(s).isNotNull();
+            assertThat(s.mapSize).isEqualTo(11);
         }
 
         @Test
-        void absentSessionMeansNullSession() {
+        void absentSessionMeansNoActiveHeroAndNoSessions() {
             repo().save(rosterOnly(List.of(minimalHero("Aria"))));
             GameState loaded = repo().load();
 
-            assertThat(loaded.session).isNull();
-            assertThat(loaded.villains).isEmpty();
+            assertThat(loaded.activeHero).isNull();
+            assertThat(loaded.sessions).isEmpty();
         }
 
         @Test
@@ -371,18 +401,71 @@ class GameRepositoryTest {
             for (int size : new int[]{9, 11, 13, 15, 17}) {
                 GameRepository r = repo();
                 r.save(session(List.of(fullHero()), "Aria", size, List.of()));
-                assertThat(r.load().session.mapSize).isEqualTo(size);
+                assertThat(r.load().sessions.get("Aria").mapSize).isEqualTo(size);
             }
         }
 
         @Test
-        void sessionWithoutMatchingRosterEntryIsStillLoaded() {
+        void sessionWhoseHeroIsNotInRosterIsDropped() {
+            // "Ghost" is not on the roster, so its session is discarded.
             repo().save(session(List.of(fullHero()), "Ghost", 11, List.of()));
+
+            GameState loaded = repo().load();
+            assertThat(loaded.sessions).isEmpty();
+            assertThat(loaded.activeHero).isNull();
+            assertThat(loaded.roster).extracting(Hero::getName).containsExactly("Aria");
+        }
+
+        @Test
+        void activeHeroPointingAtMissingRosterEntryIsCleared() {
+            // Roster has Aria, but activeHero says Bronn. Sessions are empty.
+            GameState s = rosterOnly(List.of(fullHero()));
+            s.activeHero = "Bronn";
+
+            repo().save(s);
             GameState loaded = repo().load();
 
-            assertThat(loaded.session).isNotNull();
-            assertThat(loaded.session.activeHero).isEqualTo("Ghost");
+            assertThat(loaded.activeHero).isNull();
             assertThat(loaded.roster).extracting(Hero::getName).containsExactly("Aria");
+        }
+
+        @Test
+        void multipleSessionsAreAllPreservedAndIndependent() {
+            GameState s = new GameState();
+            s.roster = new ArrayList<>(List.of(
+                    minimalHero("Aria"), minimalHero("Bronn"), minimalHero("Cass")));
+            s.activeHero = "Bronn";
+            s.sessions.put("Aria",  new Session(9,  List.of(rat(1, 1))));
+            s.sessions.put("Bronn", new Session(11, List.of(orc(2, 2), rat(3, 3))));
+            s.sessions.put("Cass",  new Session(13, List.of()));
+
+            repo().save(s);
+            GameState loaded = repo().load();
+
+            assertThat(loaded.activeHero).isEqualTo("Bronn");
+            assertThat(loaded.sessions).containsOnlyKeys("Aria", "Bronn", "Cass");
+            assertThat(loaded.sessions.get("Aria").villains).hasSize(1);
+            assertThat(loaded.sessions.get("Bronn").villains).hasSize(2);
+            assertThat(loaded.sessions.get("Cass").villains).isEmpty();
+            assertThat(loaded.sessions.get("Aria").mapSize).isEqualTo(9);
+            assertThat(loaded.sessions.get("Bronn").mapSize).isEqualTo(11);
+            assertThat(loaded.sessions.get("Cass").mapSize).isEqualTo(13);
+        }
+
+        @Test
+        void sessionOrderIsStableAcrossSaveLoad() {
+            GameState s = new GameState();
+            s.roster = new ArrayList<>(List.of(
+                    minimalHero("Zed"), minimalHero("Aria"), minimalHero("Milo")));
+            s.sessions.put("Zed",  new Session(9,  List.of()));
+            s.sessions.put("Aria", new Session(11, List.of()));
+            s.sessions.put("Milo", new Session(13, List.of()));
+
+            repo().save(s);
+            GameState loaded = repo().load();
+
+            assertThat(loaded.sessions.keySet())
+                    .containsExactly("Zed", "Aria", "Milo");
         }
     }
 
@@ -398,8 +481,8 @@ class GameRepositoryTest {
         void missingFileLoadsEmptyState() {
             GameState loaded = repo().load();
             assertThat(loaded.roster).isEmpty();
-            assertThat(loaded.session).isNull();
-            assertThat(loaded.villains).isEmpty();
+            assertThat(loaded.activeHero).isNull();
+            assertThat(loaded.sessions).isEmpty();
         }
 
         @Test
@@ -409,11 +492,8 @@ class GameRepositoryTest {
         }
 
         @Test
-        void whitespaceOnlyFileLoadsEmptyState() throws IOException {
+        void whitespaceOnlyFileIsRejectedAsMalformedJson() throws IOException {
             Files.writeString(saveFile(), "   \n\t\n");
-            // JSON can't be whitespace-only; Jackson fails, and load()
-            // wraps in RepositoryException. This test pins whichever
-            // behavior you actually want.
             assertThatThrownBy(() -> repo().load())
                     .isInstanceOf(RepositoryException.class);
         }
@@ -439,7 +519,6 @@ class GameRepositoryTest {
         void saveFileIsValidJson() throws IOException {
             repo().save(session(List.of(fullHero()), "Aria", 11, List.of(rat(2, 4))));
 
-            // If Jackson can parse it, it's valid JSON.
             new com.fasterxml.jackson.databind.ObjectMapper()
                     .readTree(saveFile().toFile());
         }
@@ -485,9 +564,9 @@ class GameRepositoryTest {
             Files.writeString(saveFile(), """
                     {
                       "version": 99,
-                      "session": null,
+                      "activeHero": null,
                       "roster": [],
-                      "villains": []
+                      "sessions": {}
                     }
                     """);
             assertThatThrownBy(() -> repo().load())
@@ -497,12 +576,10 @@ class GameRepositoryTest {
 
         @Test
         void goodHeroesSurviveAroundBadHero() throws IOException {
-            // A roster with one good hero and one malformed one.
-            // The repository should keep the good one and skip the bad one.
             Files.writeString(saveFile(), """
                     {
                       "version": 1,
-                      "session": null,
+                      "activeHero": null,
                       "roster": [
                         {
                           "name": "Aria",
@@ -523,7 +600,7 @@ class GameRepositoryTest {
                           "artifacts": []
                         }
                       ],
-                      "villains": []
+                      "sessions": {}
                     }
                     """);
 
@@ -537,7 +614,7 @@ class GameRepositoryTest {
             Files.writeString(saveFile(), """
                     {
                       "version": 1,
-                      "session": { "activeHero": "Aria", "mapSize": 11 },
+                      "activeHero": "Aria",
                       "roster": [
                         {
                           "name": "Aria",
@@ -549,17 +626,89 @@ class GameRepositoryTest {
                           "artifacts": []
                         }
                       ],
-                      "villains": [
-                        { "name": "Giant Rat", "hp": 20, "attack": 3, "defense": 1, "x": 2, "y": 4 },
-                        { "name": "Broken",    "hp": -1, "attack": 3, "defense": 1, "x": 3, "y": 3 },
-                        { "name": "Orc",       "hp": 70, "attack": 10, "defense": 5, "x": 7, "y": 8 }
-                      ]
+                      "sessions": {
+                        "Aria": {
+                          "mapSize": 11,
+                          "villains": [
+                            { "name": "Giant Rat", "hp": 20, "attack": 3, "defense": 1, "x": 2, "y": 4 },
+                            { "name": "Broken",    "hp": -1, "attack": 3, "defense": 1, "x": 3, "y": 3 },
+                            { "name": "Orc",       "hp": 70, "attack": 10, "defense": 5, "x": 7, "y": 8 }
+                          ]
+                        }
+                      }
                     }
                     """);
 
-            assertThat(repo().load().villains)
+            assertThat(repo().load().sessions.get("Aria").villains)
                     .extracting(Villain::getName)
                     .containsExactly("Giant Rat", "Orc");
+        }
+
+        @Test
+        void sessionWithInvalidMapSizeIsDropped() throws IOException {
+            Files.writeString(saveFile(), """
+                    {
+                      "version": 1,
+                      "activeHero": "Aria",
+                      "roster": [
+                        {
+                          "name": "Aria",
+                          "heroClass": "CONTACT_AGENT",
+                          "level": 1,
+                          "experience": 0,
+                          "currentHitPoints": 300,
+                          "x": null, "y": null,
+                          "artifacts": []
+                        }
+                      ],
+                      "sessions": {
+                        "Aria": { "mapSize": 0, "villains": [] }
+                      }
+                    }
+                    """);
+
+            GameState loaded = repo().load();
+            assertThat(loaded.sessions).isEmpty();
+            // activeHero no longer has a session, so it's cleared.
+            assertThat(loaded.activeHero).isEqualTo("Aria");
+        }
+
+        @Test
+        void oneGoodSessionSurvivesAroundBadSession() throws IOException {
+            Files.writeString(saveFile(), """
+                    {
+                      "version": 1,
+                      "activeHero": "Aria",
+                      "roster": [
+                        {
+                          "name": "Aria",
+                          "heroClass": "CONTACT_AGENT",
+                          "level": 1,
+                          "experience": 0,
+                          "currentHitPoints": 300,
+                          "x": null, "y": null,
+                          "artifacts": []
+                        },
+                        {
+                          "name": "Bronn",
+                          "heroClass": "CONTACT_AGENT",
+                          "level": 1,
+                          "experience": 0,
+                          "currentHitPoints": 300,
+                          "x": null, "y": null,
+                          "artifacts": []
+                        }
+                      ],
+                      "sessions": {
+                        "Aria":  { "mapSize": 11, "villains": [] },
+                        "Bronn": { "mapSize": -1, "villains": [] }
+                      }
+                    }
+                    """);
+
+            GameState loaded = repo().load();
+            assertThat(loaded.sessions).containsOnlyKeys("Aria");
+            assertThat(loaded.sessions.get("Aria").mapSize).isEqualTo(11);
         }
 
         @Test
@@ -567,16 +716,15 @@ class GameRepositoryTest {
             Files.writeString(saveFile(), """
                     {
                       "version": 1,
-                      "session": null,
+                      "activeHero": null,
                       "roster": [
                         { "name": "Aria", "heroClass": "NOT_A_CLASS", "level": 1,
                           "experience": 0, "currentHitPoints": 10, "x": null, "y": null,
                           "artifacts": [] }
                       ],
-                      "villains": []
+                      "sessions": {}
                     }
                     """);
-            // The bad hero is skipped, the roster ends up empty.
             assertThat(repo().load().roster).isEmpty();
         }
 
@@ -585,13 +733,13 @@ class GameRepositoryTest {
             Files.writeString(saveFile(), """
                     {
                       "version": 1,
-                      "session": null,
+                      "activeHero": null,
                       "roster": [
                         { "name": "Aria", "heroClass": "CONTACT_AGENT", "level": -1,
                           "experience": 0, "currentHitPoints": 10, "x": null, "y": null,
                           "artifacts": [] }
                       ],
-                      "villains": []
+                      "sessions": {}
                     }
                     """);
             assertThat(repo().load().roster).isEmpty();
@@ -602,7 +750,7 @@ class GameRepositoryTest {
             Files.writeString(saveFile(), """
                     {
                       "version": 1,
-                      "session": null,
+                      "activeHero": null,
                       "roster": [
                         { "name": "Aria", "heroClass": "CONTACT_AGENT", "level": 1,
                           "experience": 0, "currentHitPoints": 10, "x": null, "y": null,
@@ -610,10 +758,9 @@ class GameRepositoryTest {
                             { "type": "NOT_A_TYPE", "value": 5, "name": "Mystery" }
                           ] }
                       ],
-                      "villains": []
+                      "sessions": {}
                     }
                     """);
-            // The whole hero is skipped because the artifact fails to parse.
             assertThat(repo().load().roster).isEmpty();
         }
 
@@ -647,13 +794,14 @@ class GameRepositoryTest {
         }
 
         @Test
-        void topLevelFieldsAreVersionSessionRosterVillains() throws IOException {
+        void topLevelFieldsAreVersionActiveHeroRosterSessions() throws IOException {
             repo().save(rosterOnly(List.of(fullHero())));
             var names = new ArrayList<String>();
             readTree().fieldNames().forEachRemaining(names::add);
 
             assertThat(names)
-                    .containsExactlyInAnyOrder("version", "session", "roster", "villains");
+                    .containsExactlyInAnyOrder(
+                            "version", "activeHero", "roster", "sessions");
         }
 
         @Test
@@ -663,18 +811,31 @@ class GameRepositoryTest {
         }
 
         @Test
-        void sessionIsNullWhenNoSession() throws IOException {
+        void activeHeroIsNullWhenNoSession() throws IOException {
             repo().save(rosterOnly(List.of(fullHero())));
-            assertThat(readTree().path("session").isNull()).isTrue();
+            assertThat(readTree().path("activeHero").isNull()).isTrue();
         }
 
         @Test
-        void sessionCarriesActiveHeroAndMapSize() throws IOException {
+        void sessionsIsAnObjectKeyedByHeroName() throws IOException {
             repo().save(session(List.of(fullHero()), "Aria", 11, List.of(rat(2, 4))));
-            var session = readTree().path("session");
+            var sessions = readTree().path("sessions");
 
-            assertThat(session.path("activeHero").asText()).isEqualTo("Aria");
-            assertThat(session.path("mapSize").asInt()).isEqualTo(11);
+            assertThat(sessions.isObject()).isTrue();
+            assertThat(sessions.has("Aria")).isTrue();
+            var aria = sessions.path("Aria");
+            assertThat(aria.path("mapSize").asInt()).isEqualTo(11);
+            assertThat(aria.path("villains").isArray()).isTrue();
+            assertThat(aria.path("villains")).hasSize(1);
+        }
+
+        @Test
+        void sessionsIsEmptyObjectWhenNoSessions() throws IOException {
+            repo().save(rosterOnly(List.of(fullHero())));
+            var sessions = readTree().path("sessions");
+
+            assertThat(sessions.isObject()).isTrue();
+            assertThat(sessions).isEmpty();
         }
 
         @Test
@@ -689,7 +850,7 @@ class GameRepositoryTest {
         @Test
         void emptyVillainListIsEncodedAsEmptyArray() throws IOException {
             repo().save(session(List.of(fullHero()), "Aria", 11, List.of()));
-            var villains = readTree().path("villains");
+            var villains = readTree().path("sessions").path("Aria").path("villains");
 
             assertThat(villains.isArray()).isTrue();
             assertThat(villains).isEmpty();

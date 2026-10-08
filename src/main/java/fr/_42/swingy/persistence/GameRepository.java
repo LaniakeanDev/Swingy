@@ -26,7 +26,10 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 public class GameRepository {
 
@@ -75,9 +78,18 @@ public class GameRepository {
 
         GameState state = new GameState();
         state.version  = version;
-        state.session  = readSession(root.path("session"));
+        state.activeHero = readActiveHero(root.path("activeHero"));
         state.roster   = readRoster(root.path("roster"));
-        state.villains = readVillains(root.path("villains"));
+        state.sessions = readSessions(root.path("sessions"));
+
+        // Drop sessions whose hero is no longer in the roster.
+        state.sessions.keySet().removeIf(name -> findHero(state.roster, name) == null);
+
+        // Drop a dangling activeHero reference.
+        if (state.activeHero != null && findHero(state.roster, state.activeHero) == null) {
+            state.activeHero = null;
+        }
+
         return state;
     }
 
@@ -98,15 +110,10 @@ public class GameRepository {
     /*  Reading helpers                                                    */
     /* ------------------------------------------------------------------ */
 
-    private GameState.Session readSession(JsonNode node) {
+    private String readActiveHero(JsonNode node) {
         if (node == null || node.isMissingNode() || node.isNull()) return null;
-        String activeHero = node.path("activeHero").asText(null);
-        int mapSize = node.path("mapSize").asInt(0);
-        if (activeHero == null || activeHero.isBlank() || mapSize <= 0) {
-            System.err.println("[GameRepository] Ignoring malformed session block");
-            return null;
-        }
-        return new GameState.Session(activeHero, mapSize);
+        String name = node.asText(null);
+        return (name == null || name.isBlank()) ? null : name;
     }
 
     private List<Hero> readRoster(JsonNode node) {
@@ -123,6 +130,47 @@ public class GameRepository {
         return heroes;
     }
 
+    /**
+     * Reads the {@code sessions} object: a JSON object keyed by hero name,
+     * each value a session block containing {@code mapSize} and a
+     * {@code villains} array.
+     *
+     * <p>A malformed session block (bad key or bad body) is skipped; a
+     * malformed villain inside an otherwise-good session is skipped
+     * individually.</p>
+     */
+    private Map<String, GameState.Session> readSessions(JsonNode node) {
+        Map<String, GameState.Session> sessions = new LinkedHashMap<>();
+        if (node == null || !node.isObject()) return sessions;
+
+        Iterator<Map.Entry<String, JsonNode>> fields = node.fields();
+        while (fields.hasNext()) {
+            Map.Entry<String, JsonNode> entry = fields.next();
+            String heroName = entry.getKey();
+            JsonNode sessionNode = entry.getValue();
+
+            if (heroName == null || heroName.isBlank()) {
+                System.err.println("[GameRepository] Skipping session with blank hero key");
+                continue;
+            }
+            if (sessionNode == null || !sessionNode.isObject()) {
+                System.err.println("[GameRepository] Skipping malformed session for '" + heroName + "'");
+                continue;
+            }
+
+            int mapSize = sessionNode.path("mapSize").asInt(0);
+            if (mapSize <= 0) {
+                System.err.println("[GameRepository] Skipping session for '" + heroName
+                        + "': invalid mapSize");
+                continue;
+            }
+
+            List<Villain> villains = readVillains(sessionNode.path("villains"));
+            sessions.put(heroName, new GameState.Session(mapSize, villains));
+        }
+        return sessions;
+    }
+
     private List<Villain> readVillains(JsonNode node) {
         List<Villain> villains = new ArrayList<>();
         if (node == null || !node.isArray()) return villains;
@@ -135,6 +183,14 @@ public class GameRepository {
             }
         }
         return villains;
+    }
+
+    private static Hero findHero(List<Hero> roster, String name) {
+        if (name == null) return null;
+        for (Hero h : roster) {
+            if (name.equals(h.getName())) return h;
+        }
+        return null;
     }
 
     /* ------------------------------------------------------------------ */
@@ -215,6 +271,7 @@ public class GameRepository {
         }
         return new Villain(name, d.hp, d.attack, d.defense, new Position(d.x, d.y));
     }
+
     /* ------------------------------------------------------------------ */
     /*  Jackson bindings                                                   */
     /* ------------------------------------------------------------------ */
@@ -290,10 +347,10 @@ public class GameRepository {
 
     private static GameState emptyState() {
         GameState state = new GameState();
-        state.version  = CURRENT_VERSION;
-        state.session  = null;
-        state.roster   = new ArrayList<>();
-        state.villains = new ArrayList<>();
+        state.version    = CURRENT_VERSION;
+        state.activeHero = null;
+        state.roster     = new ArrayList<>();
+        state.sessions   = new LinkedHashMap<>();
         return state;
     }
 
@@ -304,9 +361,9 @@ public class GameRepository {
      * Everything the repository persists. A plain mutable POJO — this is a
      * serialization artifact, not a domain object.
      *
-     * <p>Contract: {@code roster} and {@code villains} are always mutable,
-     * freshly-allocated lists — never {@code List.of()} — because the
-     * controller adds heroes to the roster during a session.</p>
+     * <p>Contract: {@code roster} and {@code sessions} are always mutable,
+     * freshly-allocated collections — never {@code List.of()}/{@code Map.of()} —
+     * because the controller mutates them during a session.</p>
      *
      * <p>Must be {@code static} so it can be instantiated without an
      * enclosing {@code GameRepository} instance.</p>
@@ -314,20 +371,29 @@ public class GameRepository {
     public static class GameState {
 
         public int version = 1;
-        public Session session;             // null when there is no active session
-        public List<Hero> roster = new ArrayList<>();
-        public List<Villain> villains = new ArrayList<>();
 
-        /** Active hero name and the size of the map they're playing on. */
+        /** Name of the hero currently being played, or {@code null} when none. */
+        public String activeHero;
+
+        public List<Hero> roster = new ArrayList<>();
+
+        /**
+         * One session per hero, keyed by hero name. A hero not present here
+         * has no in-progress map (e.g. never started, or already finished).
+         * Uses a {@link LinkedHashMap} so the on-disk order is stable.
+         */
+        public Map<String, Session> sessions = new LinkedHashMap<>();
+
+        /** The map a single hero is playing on, plus the villains on it. */
         public static class Session {
-            public String activeHero;
             public int mapSize;
+            public List<Villain> villains = new ArrayList<>();
 
             public Session() {}
 
-            public Session(String activeHero, int mapSize) {
-                this.activeHero = activeHero;
+            public Session(int mapSize, List<Villain> villains) {
                 this.mapSize = mapSize;
+                this.villains = (villains != null) ? villains : new ArrayList<>();
             }
         }
     }
