@@ -493,12 +493,13 @@ class GameRepositoryTest {
             assertThat(content).contains("Aria");
         }
 
-        @Test
-        void saveFileIsValidJson() throws IOException {
+       @Test
+        void saveFileIsUtf8TextWithExpectedHeader() throws IOException {
             repo().save(session(List.of(fullHero()), "Aria", 11, List.of(rat(2, 4))));
-
-            new com.fasterxml.jackson.databind.ObjectMapper()
-                    .readTree(saveFile().toFile());
+            String text = Files.readString(saveFile(), StandardCharsets.UTF_8);
+            assertThat(text).startsWith("# swingy save file");
+            assertThat(text).contains("[roster]");
+            assertThat(text).contains("[sessions]");
         }
 
         @Test
@@ -529,40 +530,44 @@ class GameRepositoryTest {
     @DisplayName("corrupt input")
     class Corruption {
 
+        /** A minimal, valid roster entry for one hero named Aria. */
+        private static String validAriaBlock() {
+            return """
+                    hero.0.name = Aria
+                    hero.0.class = CONTACT_AGENT
+                    hero.0.level = 1
+                    hero.0.experience = 0
+                    hero.0.hp = 300
+                    """;
+        }
+
         @Test
-        void malformedJsonIsRejected() throws IOException {
+        void totallyGarbageFileIsRejected() throws IOException {
             Files.writeString(saveFile(), "{ this is not valid json");
             assertThatThrownBy(() -> repo().load())
                     .isInstanceOf(RepositoryException.class)
-                    .hasMessageContaining("Failed to read");
+                    .hasMessageContaining("not in swingy format");
         }
 
         @Test
         void goodHeroesSurviveAroundBadHero() throws IOException {
             Files.writeString(saveFile(), """
-                    {
-                      "roster": [
-                        {
-                          "name": "Aria",
-                          "heroClass": "CONTACT_AGENT",
-                          "level": 1,
-                          "experience": 0,
-                          "currentHitPoints": 300,
-                          "x": null, "y": null,
-                          "artifacts": []
-                        },
-                        {
-                          "name": "Bronn",
-                          "heroClass": "NOT_A_CLASS",
-                          "level": 1,
-                          "experience": 0,
-                          "currentHitPoints": 300,
-                          "x": null, "y": null,
-                          "artifacts": []
-                        }
-                      ],
-                      "sessions": {}
-                    }
+                    version = 1
+
+                    [roster]
+                    hero.0.name = Aria
+                    hero.0.class = CONTACT_AGENT
+                    hero.0.level = 1
+                    hero.0.experience = 0
+                    hero.0.hp = 300
+
+                    hero.1.name = Bronn
+                    hero.1.class = NOT_A_CLASS
+                    hero.1.level = 1
+                    hero.1.experience = 0
+                    hero.1.hp = 300
+
+                    [sessions]
                     """);
 
             assertThat(repo().load().roster)
@@ -573,32 +578,41 @@ class GameRepositoryTest {
         @Test
         void goodVillainsSurviveAroundBadVillain() throws IOException {
             Files.writeString(saveFile(), """
-                    {
-                      "roster": [
-                        {
-                          "name": "Aria",
-                          "heroClass": "CONTACT_AGENT",
-                          "level": 1,
-                          "experience": 0,
-                          "currentHitPoints": 300,
-                          "x": null, "y": null,
-                          "artifacts": []
-                        }
-                      ],
-                      "sessions": {
-                        "Aria": {
-                          "mapSize": 11,
-                          "villains": [
-                            { "name": "Giant Rat", "hp": 20, "attack": 3, "defense": 1, "x": 2, "y": 4 },
-                            { "name": "Broken",    "hp": -1, "attack": 3, "defense": 1, "x": 3, "y": 3 },
-                            { "name": "Orc",       "hp": 70, "attack": 10, "defense": 5, "x": 7, "y": 8 }
-                          ]
-                        }
-                      }
-                    }
+                    version = 1
+
+                    [roster]
+                    hero.0.name = Aria
+                    hero.0.class = CONTACT_AGENT
+                    hero.0.level = 1
+                    hero.0.experience = 0
+                    hero.0.hp = 300
+
+                    [sessions]
+                    session.0.hero = Aria
+                    session.0.mapSize = 11
+                    session.0.villain.0.name = Giant Rat
+                    session.0.villain.0.hp = 20
+                    session.0.villain.0.attack = 3
+                    session.0.villain.0.defense = 1
+                    session.0.villain.0.x = 2
+                    session.0.villain.0.y = 4
+                    session.0.villain.1.name = Broken
+                    session.0.villain.1.hp = -1
+                    session.0.villain.1.attack = 3
+                    session.0.villain.1.defense = 1
+                    session.0.villain.1.x = 3
+                    session.0.villain.1.y = 3
+                    session.0.villain.2.name = Orc
+                    session.0.villain.2.hp = 70
+                    session.0.villain.2.attack = 10
+                    session.0.villain.2.defense = 5
+                    session.0.villain.2.x = 7
+                    session.0.villain.2.y = 8
                     """);
 
-            assertThat(repo().load().sessions.get("Aria").villains)
+            GameState loaded = repo().load();
+            assertThat(loaded.sessions).containsKey("Aria");
+            assertThat(loaded.sessions.get("Aria").villains)
                     .extracting(Villain::getName)
                     .containsExactly("Giant Rat", "Orc");
         }
@@ -606,22 +620,13 @@ class GameRepositoryTest {
         @Test
         void sessionWithInvalidMapSizeIsDropped() throws IOException {
             Files.writeString(saveFile(), """
-                    {
-                      "roster": [
-                        {
-                          "name": "Aria",
-                          "heroClass": "CONTACT_AGENT",
-                          "level": 1,
-                          "experience": 0,
-                          "currentHitPoints": 300,
-                          "x": null, "y": null,
-                          "artifacts": []
-                        }
-                      ],
-                      "sessions": {
-                        "Aria": { "mapSize": 0, "villains": [] }
-                      }
-                    }
+                    version = 1
+
+                    [roster]
+                    """ + validAriaBlock() + """
+                    [sessions]
+                    session.0.hero = Aria
+                    session.0.mapSize = 0
                     """);
 
             GameState loaded = repo().load();
@@ -632,32 +637,21 @@ class GameRepositoryTest {
         @Test
         void oneGoodSessionSurvivesAroundBadSession() throws IOException {
             Files.writeString(saveFile(), """
-                    {
-                      "roster": [
-                        {
-                          "name": "Aria",
-                          "heroClass": "CONTACT_AGENT",
-                          "level": 1,
-                          "experience": 0,
-                          "currentHitPoints": 300,
-                          "x": null, "y": null,
-                          "artifacts": []
-                        },
-                        {
-                          "name": "Bronn",
-                          "heroClass": "CONTACT_AGENT",
-                          "level": 1,
-                          "experience": 0,
-                          "currentHitPoints": 300,
-                          "x": null, "y": null,
-                          "artifacts": []
-                        }
-                      ],
-                      "sessions": {
-                        "Aria":  { "mapSize": 11, "villains": [] },
-                        "Bronn": { "mapSize": -1, "villains": [] }
-                      }
-                    }
+                    version = 1
+
+                    [roster]
+                    """ + validAriaBlock() + """
+                    hero.1.name = Bronn
+                    hero.1.class = CONTACT_AGENT
+                    hero.1.level = 1
+                    hero.1.experience = 0
+                    hero.1.hp = 300
+
+                    [sessions]
+                    session.0.hero = Aria
+                    session.0.mapSize = 11
+                    session.1.hero = Bronn
+                    session.1.mapSize = -1
                     """);
 
             GameState loaded = repo().load();
@@ -668,14 +662,16 @@ class GameRepositoryTest {
         @Test
         void unknownHeroClassIsRejected() throws IOException {
             Files.writeString(saveFile(), """
-                    {
-                      "roster": [
-                        { "name": "Aria", "heroClass": "NOT_A_CLASS", "level": 1,
-                          "experience": 0, "currentHitPoints": 10, "x": null, "y": null,
-                          "artifacts": [] }
-                      ],
-                      "sessions": {}
-                    }
+                    version = 1
+
+                    [roster]
+                    hero.0.name = Aria
+                    hero.0.class = NOT_A_CLASS
+                    hero.0.level = 1
+                    hero.0.experience = 0
+                    hero.0.hp = 10
+
+                    [sessions]
                     """);
             assertThat(repo().load().roster).isEmpty();
         }
@@ -683,14 +679,16 @@ class GameRepositoryTest {
         @Test
         void negativeLevelIsRejected() throws IOException {
             Files.writeString(saveFile(), """
-                    {
-                      "roster": [
-                        { "name": "Aria", "heroClass": "CONTACT_AGENT", "level": -1,
-                          "experience": 0, "currentHitPoints": 10, "x": null, "y": null,
-                          "artifacts": [] }
-                      ],
-                      "sessions": {}
-                    }
+                    version = 1
+
+                    [roster]
+                    hero.0.name = Aria
+                    hero.0.class = CONTACT_AGENT
+                    hero.0.level = -1
+                    hero.0.experience = 0
+                    hero.0.hp = 10
+
+                    [sessions]
                     """);
             assertThat(repo().load().roster).isEmpty();
         }
@@ -698,33 +696,38 @@ class GameRepositoryTest {
         @Test
         void unknownArtifactTypeIsRejected() throws IOException {
             Files.writeString(saveFile(), """
-                    {
-                      "roster": [
-                        { "name": "Aria", "heroClass": "CONTACT_AGENT", "level": 1,
-                          "experience": 0, "currentHitPoints": 10, "x": null, "y": null,
-                          "artifacts": [
-                            { "type": "NOT_A_TYPE", "value": 5, "name": "Mystery" }
-                          ] }
-                      ],
-                      "sessions": {}
-                    }
+                    version = 1
+
+                    [roster]
+                    hero.0.name = Aria
+                    hero.0.class = CONTACT_AGENT
+                    hero.0.level = 1
+                    hero.0.experience = 0
+                    hero.0.hp = 10
+                    hero.0.artifact.0.type = NOT_A_TYPE
+                    hero.0.artifact.0.value = 5
+                    hero.0.artifact.0.name = Mystery
+
+                    [sessions]
                     """);
             assertThat(repo().load().roster).isEmpty();
         }
 
         @Test
-        void artifactNameWithHyphensRoundTrips() throws IOException {
-            Hero h = new Hero.HeroBuilder()
-                    .name("Aria")
-                    .heroClass(HeroClass.CONTACT_AGENT)
-                    .artifacts(List.of(
-                            new Artifact(ArtifactType.WEAPON, 7, "Blade-of-Doom")))
-                    .build();
-            repo().save(rosterOnly(List.of(h)));
+        void malformedLineIsSkippedNotFatal() throws IOException {
+            // A line without '=' should be skipped; the rest should load.
+            Files.writeString(saveFile(), """
+                    version = 1
 
-            assertThat(repo().load().roster.get(0).getArtifacts())
-                    .extracting(Artifact::getName)
-                    .containsExactly("Blade-of-Doom");
+                    [roster]
+                    this line has no equals sign
+                    """ + validAriaBlock() + """
+                    [sessions]
+                    """);
+
+            assertThat(repo().load().roster)
+                    .extracting(Hero::getName)
+                    .containsExactly("Aria");
         }
     }
 
@@ -736,83 +739,157 @@ class GameRepositoryTest {
     @DisplayName("on-disk format")
     class Format {
 
-        private com.fasterxml.jackson.databind.JsonNode readTree() throws IOException {
-            return new com.fasterxml.jackson.databind.ObjectMapper()
-                    .readTree(saveFile().toFile());
+        private String readText() throws IOException {
+            return Files.readString(saveFile(), StandardCharsets.UTF_8);
         }
 
         @Test
-        void topLevelFieldsAreRosterAndSessions() throws IOException {
+        void fileStartsWithCommentHeaderAndVersion() throws IOException {
             repo().save(rosterOnly(List.of(fullHero())));
-            var names = new ArrayList<String>();
-            readTree().fieldNames().forEachRemaining(names::add);
+            String text = readText();
 
-            assertThat(names)
-                    .containsExactlyInAnyOrder("roster", "sessions");
+            assertThat(text).startsWith("# swingy save file");
+            assertThat(text).contains("version = 1");
         }
 
         @Test
-        void sessionsIsAnObjectKeyedByHeroName() throws IOException {
-            repo().save(session(List.of(fullHero()), "Aria", 11, List.of(rat(2, 4))));
-            var sessions = readTree().path("sessions");
-
-            assertThat(sessions.isObject()).isTrue();
-            assertThat(sessions.has("Aria")).isTrue();
-            var aria = sessions.path("Aria");
-            assertThat(aria.path("mapSize").asInt()).isEqualTo(11);
-            assertThat(aria.path("villains").isArray()).isTrue();
-            assertThat(aria.path("villains")).hasSize(1);
-        }
-
-        @Test
-        void sessionsIsEmptyObjectWhenNoSessions() throws IOException {
+        void rosterSectionIsPresent() throws IOException {
             repo().save(rosterOnly(List.of(fullHero())));
-            var sessions = readTree().path("sessions");
-
-            assertThat(sessions.isObject()).isTrue();
-            assertThat(sessions).isEmpty();
+            assertThat(readText()).contains("[roster]");
         }
 
         @Test
-        void missingPositionIsEncodedAsNull() throws IOException {
+        void sessionsSectionIsPresentEvenWhenEmpty() throws IOException {
+            repo().save(rosterOnly(List.of(fullHero())));
+            assertThat(readText()).contains("[sessions]");
+        }
+
+        @Test
+        void heroFieldsAreEncodedWithDottedKeys() throws IOException {
+            repo().save(rosterOnly(List.of(fullHero())));
+            String text = readText();
+
+            assertThat(text).contains("hero.0.name = Aria");
+            assertThat(text).contains("hero.0.class = CONTACT_AGENT");
+            assertThat(text).contains("hero.0.level = 3");
+            assertThat(text).contains("hero.0.experience = 2500");
+            assertThat(text).contains("hero.0.hp = 42");
+            assertThat(text).contains("hero.0.x = 5");
+            assertThat(text).contains("hero.0.y = 6");
+        }
+
+        @Test
+        void artifactsAreEncodedAsIndexedTriples() throws IOException {
+            repo().save(rosterOnly(List.of(fullHero())));
+            String text = readText();
+
+            assertThat(text).contains("hero.0.artifact.0.type = WEAPON");
+            assertThat(text).contains("hero.0.artifact.0.value = 7");
+            assertThat(text).contains("hero.0.artifact.0.name = Runeblade");
+            assertThat(text).contains("hero.0.artifact.1.type = ARMOR");
+            assertThat(text).contains("hero.0.artifact.2.type = HELM");
+        }
+
+        @Test
+        void missingPositionIsOmittedNotEncodedAsNull() throws IOException {
             repo().save(rosterOnly(List.of(minimalHero("Aria"))));
-            var hero = readTree().path("roster").get(0);
+            String text = readText();
 
-            assertThat(hero.path("x").isNull()).isTrue();
-            assertThat(hero.path("y").isNull()).isTrue();
+            assertThat(text).doesNotContain("hero.0.x");
+            assertThat(text).doesNotContain("hero.0.y");
         }
 
         @Test
-        void emptyVillainListIsEncodedAsEmptyArray() throws IOException {
+        void sessionUsesHeroNameAsItsIdentity() throws IOException {
+            repo().save(session(List.of(fullHero()), "Aria", 11, List.of(rat(2, 4))));
+            String text = readText();
+
+            assertThat(text).contains("session.0.hero = Aria");
+            assertThat(text).contains("session.0.mapSize = 11");
+            assertThat(text).contains("session.0.villain.0.name = Giant Rat");
+            assertThat(text).contains("session.0.villain.0.hp = 20");
+            assertThat(text).contains("session.0.villain.0.x = 2");
+        }
+
+        @Test
+        void emptyVillainListProducesNoVillainLines() throws IOException {
             repo().save(session(List.of(fullHero()), "Aria", 11, List.of()));
-            var villains = readTree().path("sessions").path("Aria").path("villains");
+            String text = readText();
 
-            assertThat(villains.isArray()).isTrue();
-            assertThat(villains).isEmpty();
+            assertThat(text).contains("session.0.hero = Aria");
+            assertThat(text).contains("session.0.mapSize = 11");
+            assertThat(text).doesNotContain("session.0.villain.");
         }
 
         @Test
-        void artifactsAreEncodedAsArrayOfObjects() throws IOException {
-            repo().save(rosterOnly(List.of(fullHero())));
-            var artifacts = readTree().path("roster").get(0).path("artifacts");
+        void multipleHeroesGetSequentialIndices() throws IOException {
+            repo().save(rosterOnly(List.of(
+                    minimalHero("Aria"), minimalHero("Bronn"), minimalHero("Cass"))));
+            String text = readText();
 
-            assertThat(artifacts.isArray()).isTrue();
-            assertThat(artifacts).hasSize(3);
-            assertThat(artifacts.get(0).path("type").asText()).isEqualTo("WEAPON");
-            assertThat(artifacts.get(0).path("value").asInt()).isEqualTo(7);
-            assertThat(artifacts.get(0).path("name").asText()).isEqualTo("Runeblade");
+            assertThat(text).contains("hero.0.name = Aria");
+            assertThat(text).contains("hero.1.name = Bronn");
+            assertThat(text).contains("hero.2.name = Cass");
+        }
+
+        @Test
+        void commentsAreToleratedOnLoad() throws IOException {
+            // Hand-edit: inject a comment and a blank line, then reload.
+            repo().save(rosterOnly(List.of(minimalHero("Aria"))));
+            String original = readText();
+            String edited = original.replace(
+                    "[roster]",
+                    "[roster]\n# this hero is the player's main\n");
+            Files.writeString(saveFile(), edited, StandardCharsets.UTF_8);
+
+            assertThat(repo().load().roster)
+                    .extracting(Hero::getName)
+                    .containsExactly("Aria");
+        }
+
+        @Test
+        void unknownSectionsAreIgnored() throws IOException {
+            // Forward-compat: a future version adds [settings]. Old code
+            // should ignore it rather than choke.
+            repo().save(rosterOnly(List.of(minimalHero("Aria"))));
+            String original = readText();
+            Files.writeString(saveFile(),
+                    original + "\n[settings]\nvolume = 7\n",
+                    StandardCharsets.UTF_8);
+
+            assertThat(repo().load().roster)
+                    .extracting(Hero::getName)
+                    .containsExactly("Aria");
         }
 
         @Test
         void savingWithSameNameAcrossDifferentFilesIsIsolated() {
-            GameRepository a = new GameRepository(tempDir.resolve("a.json").toString());
-            GameRepository b = new GameRepository(tempDir.resolve("b.json").toString());
+            GameRepository a = new GameRepository(tempDir.resolve("a.txt").toString());
+            GameRepository b = new GameRepository(tempDir.resolve("b.txt").toString());
 
             a.save(rosterOnly(List.of(minimalHero("Aria"))));
             b.save(rosterOnly(List.of(minimalHero("Bronn"))));
 
             assertThat(a.load().roster).extracting(Hero::getName).containsExactly("Aria");
             assertThat(b.load().roster).extracting(Hero::getName).containsExactly("Bronn");
+        }
+
+        @Test
+        void escapingRoundTripsSpecialCharacters() {
+            // An artifact name with a backslash and a hero name with a space —
+            // both go through escape() on save and unescape() on load.
+            Hero h = new Hero.HeroBuilder()
+                    .name("Ann Marie")
+                    .heroClass(HeroClass.CONTACT_AGENT)
+                    .artifacts(List.of(
+                            new Artifact(ArtifactType.WEAPON, 7, "Blade\\of\\Doom")))
+                    .build();
+            repo().save(rosterOnly(List.of(h)));
+            Hero loaded = repo().load().roster.get(0);
+
+            assertThat(loaded.getName()).isEqualTo("Ann Marie");
+            assertThat(loaded.getArtifacts().get(0).getName())
+                    .isEqualTo("Blade\\of\\Doom");
         }
     }
 
