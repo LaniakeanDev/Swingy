@@ -492,10 +492,13 @@ class GameRepositoryTest {
         }
 
         @Test
-        void whitespaceOnlyFileIsRejectedAsMalformedJson() throws IOException {
+        void whitespaceOnlyFileLoadsEmptyState() throws IOException {
             Files.writeString(saveFile(), "   \n\t\n");
-            assertThatThrownBy(() -> repo().load())
-                    .isInstanceOf(RepositoryException.class);
+
+            GameState loaded = repo().load();
+            assertThat(loaded.roster).isEmpty();
+            assertThat(loaded.activeHero).isNull();
+            assertThat(loaded.sessions).isEmpty();
         }
 
         @Test
@@ -557,21 +560,6 @@ class GameRepositoryTest {
             assertThatThrownBy(() -> repo().load())
                     .isInstanceOf(RepositoryException.class)
                     .hasMessageContaining("Failed to read");
-        }
-
-        @Test
-        void wrongVersionIsRejected() throws IOException {
-            Files.writeString(saveFile(), """
-                    {
-                      "version": 99,
-                      "activeHero": null,
-                      "roster": [],
-                      "sessions": {}
-                    }
-                    """);
-            assertThatThrownBy(() -> repo().load())
-                    .isInstanceOf(RepositoryException.class)
-                    .hasMessageContaining("version");
         }
 
         @Test
@@ -794,20 +782,13 @@ class GameRepositoryTest {
         }
 
         @Test
-        void topLevelFieldsAreVersionActiveHeroRosterSessions() throws IOException {
+        void topLevelFieldsAreActiveHeroRosterSessions() throws IOException {
             repo().save(rosterOnly(List.of(fullHero())));
             var names = new ArrayList<String>();
             readTree().fieldNames().forEachRemaining(names::add);
 
             assertThat(names)
-                    .containsExactlyInAnyOrder(
-                            "version", "activeHero", "roster", "sessions");
-        }
-
-        @Test
-        void versionIsOne() throws IOException {
-            repo().save(rosterOnly(List.of(fullHero())));
-            assertThat(readTree().path("version").asInt()).isEqualTo(1);
+                    .containsExactlyInAnyOrder("activeHero", "roster", "sessions");
         }
 
         @Test

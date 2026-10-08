@@ -33,8 +33,6 @@ import java.util.Map;
 
 public class GameRepository {
 
-    private static final int CURRENT_VERSION = 1;
-
     private final Path saveFile;
     private final ObjectMapper mapper;
 
@@ -69,15 +67,7 @@ public class GameRepository {
             throw new RepositoryException("Failed to read save file: " + saveFile, e);
         }
 
-        int version = root.path("version").asInt(0);
-        if (version != CURRENT_VERSION) {
-            throw new RepositoryException(
-                    "Unsupported save-file version " + version
-                    + " (expected " + CURRENT_VERSION + ")");
-        }
-
         GameState state = new GameState();
-        state.version  = version;
         state.activeHero = readActiveHero(root.path("activeHero"));
         state.roster   = readRoster(root.path("roster"));
         state.sessions = readSessions(root.path("sessions"));
@@ -347,7 +337,6 @@ public class GameRepository {
 
     private static GameState emptyState() {
         GameState state = new GameState();
-        state.version    = CURRENT_VERSION;
         state.activeHero = null;
         state.roster     = new ArrayList<>();
         state.sessions   = new LinkedHashMap<>();
@@ -369,8 +358,6 @@ public class GameRepository {
      * enclosing {@code GameRepository} instance.</p>
      */
     public static class GameState {
-
-        public int version = 1;
 
         /** Name of the hero currently being played, or {@code null} when none. */
         public String activeHero;
