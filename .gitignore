@@ -2,4 +2,4 @@ sources.txt
 tools/
 target/
 dependency-reduced-pom.xml
-gamestate.json
+gamestate.txt

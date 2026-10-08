@@ -1,6 +1,0 @@
-# Swingy save file — do not edit by hand
-VERSION|1
-S|azerty|9
-H|azerty|GSV|1|400|294|3|7|WEAPON:5:Oak Staff
-V|Cave Bat|18|4|1|8|1
-V|Cave Bat|18|4|1|7|0

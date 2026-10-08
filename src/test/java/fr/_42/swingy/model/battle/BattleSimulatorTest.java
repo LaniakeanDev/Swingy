@@ -45,12 +45,5 @@ class BattleSimulatorTest {
         assertThat(hero.getCurrentHitPoints()).isZero();
         assertThat(report.drop()).isEmpty();
     }
-
-    @Test void damageIsNeverZero() {
-        // Even with defense > attack, min damage is 1.
-        // Hero hero = ...; Villain tank = new Villain("Tank", 50, 1, 999, ...);
-        // seed RNG so the fight ends quickly
-        // assert villain eventually takes at least 1 damage per hit
-    }
 }
 
