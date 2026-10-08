@@ -1,39 +1,32 @@
 {
-  "version" : 1,
-  "session" : {
-    "activeHero" : "qwerty",
-    "mapSize" : 9
-  },
   "roster" : [ {
     "name" : "qwerty",
     "heroClass" : "REFERER",
     "level" : 1,
-    "experience" : 0,
-    "currentHitPoints" : 300,
-    "x" : 6,
-    "y" : 6,
+    "experience" : 500,
+    "currentHitPoints" : 284,
+    "x" : 4,
+    "y" : 8,
     "artifacts" : [ ]
   } ],
-  "villains" : [ {
-    "name" : "Bandit",
-    "hp" : 35,
-    "attack" : 6,
-    "defense" : 3,
-    "x" : 7,
-    "y" : 6
-  }, {
-    "name" : "Cave Bat",
-    "hp" : 18,
-    "attack" : 4,
-    "defense" : 1,
-    "x" : 0,
-    "y" : 7
-  }, {
-    "name" : "Wild Boar",
-    "hp" : 40,
-    "attack" : 5,
-    "defense" : 2,
-    "x" : 1,
-    "y" : 6
-  } ]
+  "sessions" : {
+    "qwerty" : {
+      "mapSize" : 9,
+      "villains" : [ {
+        "name" : "Goblin Scout",
+        "hp" : 30,
+        "attack" : 5,
+        "defense" : 2,
+        "x" : 6,
+        "y" : 0
+      }, {
+        "name" : "Goblin Scout",
+        "hp" : 30,
+        "attack" : 5,
+        "defense" : 2,
+        "x" : 3,
+        "y" : 8
+      } ]
+    }
+  }
 }

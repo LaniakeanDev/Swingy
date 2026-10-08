@@ -360,6 +360,10 @@ public class GameRepository {
             public int mapSize;
             public List<Villain> villains = new ArrayList<>();
 
+            // When ObjectMapper deserializes sessions, it walks the Map<String, Session> and, 
+            // for each entry, constructs a Session via its no-arg constructor, 
+            // then sets each field (mapSize, villains) reflectively. 
+            // If there's no no-arg constructor available, Jackson can't build the object and throws.
             public Session() {}
 
             public Session(int mapSize, List<Villain> villains) {

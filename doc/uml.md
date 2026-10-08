@@ -1,10 +1,11 @@
 ```mermaid
 classDiagram
-    %% ============================================================
-    %%  ENTRY POINT
-    %% ============================================================
+    direction LR
+
+    %% ------------------------------------------------------------------
+    %% Entry point
+    %% ------------------------------------------------------------------
     class Main {
-        <<entry point>>
         -Main()
         +main(String[] args) void$
         -createView(String mode) View$
@@ -12,102 +13,132 @@ classDiagram
         -printUsage() void$
     }
 
-    %% ============================================================
-    %%  CONTROLLER LAYER
-    %% ============================================================
+    %% ------------------------------------------------------------------
+    %% Controller
+    %% ------------------------------------------------------------------
     class GameController {
         -View view
         -Validator validator
-        -HeroRepository repository
+        -GameRepository repository
         -GameMap map
         -Hero currentHero
-        +GameController(View, Validator, HeroRepository)
+        -List~Hero~ heroList
+        -Random random
+        -BattleSimulator battleSimulator
+        +GameController(View, Validator, GameRepository, Random)
         +run() void
-        -mainMenu() Hero
-        -gameLoop() void
-        -handleMove(Direction) void
-        -handleEncounter(Villain) void
+        -saveRosterOnly() void
         -saveAndExit() void
+        -villainCountFor(int) int
+        -gameLoop() void
+        -mapSizeFor(int) int
+        -handleMove(Direction) void
+        -mainMenu() Hero
+        -askHeroClass() String
+        -checkNameUnicity(String) boolean
+        -createNewHero() Hero
+        -handleEncounter(Hero, Villain) EncounterResult
+        -promptKeepArtifact(Hero, Artifact) void
     }
 
-    class BattleController {
-        +resolve(Hero, Villain) BattleResult
-        -rollFlee() boolean
-        -simulateExchange(Hero, Villain) void
+    %% ------------------------------------------------------------------
+    %% Persistence
+    %% ------------------------------------------------------------------
+    class GameRepository {
+        -Path saveFile
+        -ObjectMapper mapper
+        +GameRepository(String)
+        +load() GameState
+        +save(GameState) void
+        -readRoster(JsonNode) List~Hero~
+        -readSessions(JsonNode) Map~String,Session~
+        -readVillains(JsonNode) List~Villain~
+        -findHero(List~Hero~, String) Hero$
+        -toDto(Hero) HeroDto$
+        -toDto(Artifact) ArtifactDto$
+        -toDto(Villain) VillainDto$
+        -fromDto(HeroDto) Hero$
+        -fromDto(ArtifactDto) Artifact$
+        -fromDto(VillainDto) Villain$
+        -requireText(String, String) String$
+        -parseHeroClass(String) HeroClass$
+        -parseArtifactType(String) ArtifactType$
+        -isEmpty(Path) boolean$
+        -emptyState() GameState$
     }
 
-    %% ============================================================
-    %%  VIEW LAYER
-    %% ============================================================
-    class View {
-        <<interface>>
-        +displayMessage(String) void
-        +displayError(String) void
-        +askInput(String) String
-        +renderMap(GameMap, Hero) void
-        +showHeroStats(Hero) void
-        +showBattleResult(BattleResult) void
-        +close() void
+    class GameState {
+        +List~Hero~ roster
+        +Map~String,Session~ sessions
     }
 
-    class ConsoleView {
-        -Scanner scanner
-        +displayMessage(String) void
-        +displayError(String) void
-        +askInput(String) String
-        +renderMap(GameMap, Hero) void
-        +showHeroStats(Hero) void
-        +showBattleResult(BattleResult) void
-        +close() void
+    class Session {
+        +int mapSize
+        +List~Villain~ villains
+        +Session()
+        +Session(int, List~Villain~)
     }
 
-    class GuiView {
-        -SwingyFrame frame
-        +displayMessage(String) void
-        +displayError(String) void
-        +askInput(String) String
-        +renderMap(GameMap, Hero) void
-        +showHeroStats(Hero) void
-        +showBattleResult(BattleResult) void
-        +close() void
+    class RepositoryException {
+        +RepositoryException(String)
+        +RepositoryException(String, Throwable)
     }
 
-    class SwingyFrame {
-        -JPanel mainPanel
-        -GamePanel gamePanel
-        -MenuPanel menuPanel
-        -HeroStatsPanel statsPanel
-        +showMenu() void
-        +showGame() void
-        +updateMap(GameMap, Hero) void
-        +updateStats(Hero) void
+    class HeroDto {
+        +String name
+        +String heroClass
+        +int level
+        +long experience
+        +int currentHitPoints
+        +Integer x
+        +Integer y
+        +List~ArtifactDto~ artifacts
     }
 
-    %% ============================================================
-    %%  MODEL — ENTITIES
-    %% ============================================================
+    class VillainDto {
+        +String name
+        +int hp
+        +int attack
+        +int defense
+        +int x
+        +int y
+    }
+
+    class ArtifactDto {
+        +String type
+        +int value
+        +String name
+    }
+
+    %% ------------------------------------------------------------------
+    %% Domain — entities
+    %% ------------------------------------------------------------------
     class Hero {
         -String name
         -HeroClass heroClass
         -int level
         -long experience
-        -int hitPoints
+        -int baseHitPoints
+        -int currentHitPoints
         -List~Artifact~ artifacts
+        -Position position
+        +Hero(HeroBuilder)
         +getName() String
         +getHeroClass() HeroClass
+        +getPosition() Position
         +getLevel() int
         +getExperience() long
         +getAttack() int
         +getDefense() int
         +getHitPoints() int
+        +getCurrentHitPoints() int
         +getArtifacts() List~Artifact~
-        +gainExperience(long) void
-        +experienceForNextLevel() long
-        +equipArtifact(Artifact) boolean
+        +setPosition(Position) void
         +takeDamage(int) void
-        +heal(int) void
-        +isAlive() boolean
-        +serialize() String
+        +gainExperience(long) void
+        +experienceToNextLevel() long
+        -levelUp() void
+        +equipArtifact(Artifact) boolean
     }
 
     class HeroBuilder {
@@ -115,67 +146,165 @@ classDiagram
         -HeroClass heroClass
         -int level
         -long experience
+        -int currentHitPoints
         -List~Artifact~ artifacts
+        -Position position
+        +position(Position) HeroBuilder
         +name(String) HeroBuilder
         +heroClass(HeroClass) HeroBuilder
         +level(int) HeroBuilder
         +experience(long) HeroBuilder
+        +currentHitPoints(int) HeroBuilder
         +artifacts(List~Artifact~) HeroBuilder
         +build() Hero
     }
 
     class Villain {
         -String name
-        -int power
+        -int hitPoints
         -int attack
         -int defense
-        -int hitPoints
-        -ArtifactDrop drop
+        -Position position
+        +Villain(String, int, int, int, Position)
+        +getName() String
+        +getHitPoints() int
         +getAttack() int
         +getDefense() int
-        +getHitPoints() int
-        +getPower() int
+        +getPosition() Position
         +takeDamage(int) void
-        +isAlive() boolean
-        +serialize() String
-    }
-
-    class VillainBuilder {
-        -String name
-        -int power
-        +name(String) VillainBuilder
-        +power(int) VillainBuilder
-        +build() Villain
     }
 
     class Artifact {
-        -ArtifactSlot slot
-        -int bonus
-        +getSlot() ArtifactSlot
-        +getBonus() int
-        +serialize() String
-        +parse(String) Artifact$
+        -ArtifactType type
+        -int value
+        -String name
+        +Artifact(ArtifactType, int, String)
+        +getType() ArtifactType
+        +getValue() int
+        +getName() String
     }
 
-    %% ============================================================
-    %%  MODEL — ENUMS
-    %% ============================================================
+    class ArtifactPool {
+        -List~Artifact~ WEAK$
+        -List~Artifact~ MID$
+        -List~Artifact~ STRONG$
+        -ArtifactPool()
+        +rollForPower(Random, int) Artifact$
+        -tierFor(int) List~Artifact~$
+        +all() List~Artifact~$
+    }
+
+    class VillainPool {
+        -List~VillainTemplate~ WEAK$
+        -List~VillainTemplate~ MID$
+        -List~VillainTemplate~ STRONG$
+        -VillainPool()
+        +rollForHeroLevel(Random, int, Position) Villain$
+        +all() List~VillainTemplate~$
+        -templateFor(int) List~VillainTemplate~$
+    }
+
+    class VillainTemplate {
+        -String name
+        -int hitPoints
+        -int attack
+        -int defense
+        -VillainTemplate(String, int, int, int)
+        +getName() String
+        +getHitPoints() int
+        +getAttack() int
+        +getDefense() int
+        +toVillain(Position) Villain
+    }
+
+    %% ------------------------------------------------------------------
+    %% Domain — map
+    %% ------------------------------------------------------------------
+    class GameMap {
+        -int size
+        -Object[][] grid
+        -List~Villain~ villains
+        -Random random
+        +GameMap(int, Random)
+        +getSize() int
+        +getCell(Position) Object
+        +getNextPosition(Position, Direction) Position
+        +placeHero(Hero, Position) void
+        +placeVillain(Villain) boolean
+        +replaceVillains(List~Villain~) void
+        +isBorder(Position) boolean
+        +isInside(Position) boolean
+        +center() Position
+        +generateVillains(int, int) void
+        -randomEmptyPosition() Position
+        +getVillainAt(Position) Villain
+        +hasVillainAt(Position) boolean
+        +removeVillain(Villain) void
+        +getVillains() List~Villain~
+        -requireInside(Position) void
+    }
+
+    class Position {
+        -int x
+        -int y
+        +Position(int, int)
+        +getX() int
+        +getY() int
+        +translate(Direction, int) Position
+        +equals(Object) boolean
+        +hashCode() int
+        +toString() String
+    }
+
+    %% ------------------------------------------------------------------
+    %% Domain — battle
+    %% ------------------------------------------------------------------
+    class BattleSimulator {
+        -Random random
+        +BattleSimulator(Random)
+        +fight(Hero, Villain) BattleReport
+        -computeDamage(int, int) int
+        -awardVictory(Hero, Villain, List~String~) Optional~Artifact~
+    }
+
+    class BattleReport {
+        <<record>>
+        +EncounterResult result
+        +List~String~ log
+        +Optional~Artifact~ drop
+    }
+
+    %% ------------------------------------------------------------------
+    %% Domain — enums
+    %% ------------------------------------------------------------------
     class HeroClass {
         <<enumeration>>
-        WARRIOR
-        MAGE
-        ROGUE
+        CULTURE_CITIZEN
+        CONTACT_AGENT
+        SC_AGENT
+        DRONE
+        GCU
+        GSV
+        CONTRACTOR
+        REFERER
+        -int baseAttack
+        -int baseDefense
+        -int baseHitPoints
         +getBaseAttack() int
         +getBaseDefense() int
         +getBaseHitPoints() int
+        +displayName() String
+        +fromString(String) HeroClass$
     }
 
-    class ArtifactSlot {
+    class ArtifactType {
         <<enumeration>>
         WEAPON
         ARMOR
         HELM
         +isCompatibleWith(HeroClass) boolean
+        +fromString(String) ArtifactType$
+        +displayName() String
     }
 
     class Direction {
@@ -184,53 +313,49 @@ classDiagram
         EAST
         SOUTH
         WEST
+        +fromString(String) Direction$
     }
 
-    %% ============================================================
-    %%  MODEL — MAP
-    %% ============================================================
-    class GameMap {
-        -int size
-        -Position[][] grid
-        -List~Villain~ villains
-        +GameMap(int size)
-        +getSize() int
-        +getCell(Position) Object
-        +placeHero(Hero, Position) void
-        +placeVillain(Villain, Position) void
-        +isBorder(Position) boolean
-        +center() Position
-        +generateVillains(int count) void
-    }
-
-    class Position {
-        -int x
-        -int y
-        +getX() int
-        +getY() int
-        +translate(Direction) void
-        +equals(Object) boolean
-        +hashCode() int
-    }
-
-    %% ============================================================
-    %%  MODEL — ENCOUNTER
-    %% ============================================================
     class EncounterResult {
         <<enumeration>>
         HERO_WON
         HERO_FLED
-        HERO_DIED
+        HERO_LOST
     }
 
-    class BattleSimulator {
-        +simulate(Hero, Villain) EncounterResult
-        -rollLuck() int
+    %% ------------------------------------------------------------------
+    %% View
+    %% ------------------------------------------------------------------
+    class View {
+        <<interface>>
+        +displayMessage(String) void
+        +displayError(String) void
+        +askInput(String) String
+        +renderMap(GameMap, Hero) void
+        +showHeroStats(Hero) void
+        +displayHeroList(List~Hero~) void
+        +showBattleResult(EncounterResult, Hero, Villain) void
+        +showWinDialog(Hero) void
+        +showLossDialog(Hero, Villain) void
+        +close() void
     }
 
-    %% ============================================================
-    %%  VALIDATION
-    %% ============================================================
+    class ConsoleView {
+        -Scanner scanner
+        -printHorizontalBorder(int) void
+    }
+
+    class GuiView {
+        -JFrame frame
+        -JTextArea output
+        -JTextField input
+        -BlockingQueue~String~ inputQueue
+        -buildUi() void
+    }
+
+    %% ------------------------------------------------------------------
+    %% Validation & util
+    %% ------------------------------------------------------------------
     class Validator {
         -javax.validation.Validator delegate
         +Validator(javax.validation.Validator)
@@ -238,72 +363,87 @@ classDiagram
         +validateAndCollect(T, Class...) String
     }
 
-    %% ============================================================
-    %%  PERSISTENCE
-    %% ============================================================
-    class HeroRepository {
-        -String filePath
-        +HeroRepository(String)
-        +loadAll() List~Hero~
-        +saveAll(List~Hero~) void
-        +save(Hero) void
-        -parseLine(String) Hero
+    class Constants {
+        +String SAVE_FILE$
+        +int EXIT_FAILURE$
+        +int EXIT_USAGE$
     }
 
-    %% ============================================================
-    %%  RELATIONSHIPS
-    %% ============================================================
+    %% ==================================================================
+    %% Relationships
+    %% ==================================================================
 
-    %% Entry wiring
+    %% Entry point
     Main ..> GameController : creates
     Main ..> ConsoleView : creates
     Main ..> GuiView : creates
+    Main ..> GameRepository : creates
     Main ..> Validator : creates
 
-    %% Controller ↔ View (interface)
+    %% Controller wiring
     GameController --> View : uses
-    GameController --> BattleController : delegates
-    GameController --> HeroRepository : persists via
-    GameController --> Validator : validates input
+    GameController --> Validator : uses
+    GameController --> GameRepository : uses
     GameController --> GameMap : owns
     GameController --> Hero : currentHero
-
-    %% View implementations
-    View <|.. ConsoleView : implements
-    View <|.. GuiView : implements
-    GuiView --> SwingyFrame : owns
-
-    %% Hero composition
-    Hero --> HeroClass : has
-    Hero --> "0..*" Artifact : owns
-    Hero ..> HeroBuilder : built by
-    HeroBuilder ..> Hero : builds
-
-    %% Villain composition
-    Villain ..> VillainBuilder : built by
-    VillainBuilder ..> Villain : builds
-    Villain --> Artifact : may drop
-
-    %% Artifact wiring
-    Artifact --> ArtifactSlot : has
-
-    %% Map wiring
-    GameMap --> "1..*" Position : contains
-    GameMap --> "0..*" Villain : populates
-    GameMap --> Hero : places
-
-    %% Battle
-    BattleController --> BattleSimulator : uses
-    BattleSimulator ..> BattleResult : returns
-    BattleController ..> Hero : reads
-    BattleController ..> Villain : reads
+    GameController *-- BattleSimulator : owns
+    GameController ..> GameState : reads/writes
+    GameController ..> Session : builds
+    GameController ..> Direction : parses
+    GameController ..> EncounterResult : handles
 
     %% Persistence
-    HeroRepository ..> Hero : serializes
-    HeroRepository ..> Artifact : deserializes
+    GameRepository ..> GameState : returns
+    GameRepository ..> RepositoryException : throws
+    GameRepository ..> HeroDto : converts
+    GameRepository ..> VillainDto : converts
+    GameRepository ..> ArtifactDto : converts
+    GameState *-- Session : contains
+    Session o-- Villain : "villains *"
+    GameState o-- Hero : "roster *"
+
+    %% Domain composition
+    Hero *-- Artifact : "artifacts *"
+    Hero --> Position : has
+    Hero --> HeroClass : uses
+    Hero ..> ArtifactType : filters
+    HeroBuilder ..> Hero : builds
+
+    Villain --> Position : has
+
+    Artifact --> ArtifactType : has
+
+    ArtifactPool ..> Artifact : creates
+    ArtifactPool ..> ArtifactType : uses
+
+    VillainPool *-- VillainTemplate : contains
+    VillainPool ..> Villain : creates
+
+    %% Map
+    GameMap o-- Villain : "villains *"
+    GameMap ..> Hero : holds in grid
+    GameMap ..> Position : uses
+    GameMap ..> Direction : uses
+    GameMap ..> VillainPool : uses to spawn
+
+    Position ..> Direction : uses
+
+    %% Battle
+    BattleSimulator ..> Hero : fights
+    BattleSimulator ..> Villain : fights
+    BattleSimulator ..> BattleReport : produces
+    BattleSimulator ..> ArtifactPool : rolls loot
+    BattleReport --> EncounterResult : has
+    BattleReport o-- Artifact : drop
+
+    %% View hierarchy
+    ConsoleView ..|> View : implements
+    GuiView ..|> View : implements
+    View ..> GameMap : renders
+    View ..> Hero : displays
+    View ..> Villain : displays
+    View ..> EncounterResult : displays
 
     %% Validation
     Validator ..> Hero : validates
-
-
 ```
