@@ -100,6 +100,11 @@ public class ConsoleView implements View {
     }
 
     @Override
+    public String askText(String prompt) {
+        return askInput(prompt);
+    }
+
+    @Override
     public void showHeroStats(Hero hero) {
         System.out.println(BLUE + BOLD + "╭─ " + hero.getName()
                 + " the " + hero.getHeroClass().displayName() + " ─╮" + RESET);

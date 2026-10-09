@@ -11,6 +11,7 @@ public interface View {
     void displayMessage(String message);
     void displayError(String error);
     String askInput(String prompt);
+    String askText(String prompt);
     void renderMap(GameMap map, Hero hero);
     void showHeroStats(Hero hero);
     void displayHeroList(List<Hero> heroes);
