@@ -179,7 +179,7 @@ public class GameMap {
         // Try random sampling first; fall back to linear scan if unlucky.
         for (int attempt = 0; attempt < 50; attempt++) {
             Position p = new Position(random.nextInt(size), random.nextInt(size));
-            if (grid[p.getY()][p.getX()] == null) {
+            if (grid[p.getY()][p.getX()] == null && !isBorder(p)) {
                 return p;
             }
         }
