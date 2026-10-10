@@ -32,8 +32,21 @@ public final class Main {
             System.exit(Constants.EXIT_USAGE);
         }
 
+        // Relaunch once with the scale flag if we weren't started with it.
+        if (System.getProperty("sun.java2d.uiScale") == null
+                && System.getProperty("swingy.relaunched") == null) {
+            try {
+                relaunchWithScale(args);
+                // If relaunch succeeds, relaunchWithScale never returns (System.exit).
+                // If it returns, the relaunch failed — keep going in this JVM.
+            } catch (java.io.IOException | InterruptedException e) {
+                System.err.println("[swingy] Could not relaunch with scale flag: " + e);
+                if (e instanceof InterruptedException) Thread.currentThread().interrupt();
+            }
+        }
+
         String mode = args[0].trim().toLowerCase();
-        
+
         try {
             View view;
             try {
@@ -49,13 +62,31 @@ public final class Main {
             GameRepository repository = new GameRepository(Constants.SAVE_FILE);
             Random random = new Random();
             new GameController(view, validator, repository, random).run();
-        } 
-        catch (Exception e) {
-            // Last-resort guard: never let a stack trace crash the jar silently
+        } catch (Exception e) {
             System.err.println("[swingy] Fatal error: " + e.getMessage());
             e.printStackTrace();
             System.exit(Constants.EXIT_FAILURE);
         }
+    }
+
+    private static void relaunchWithScale(String[] args)
+            throws java.io.IOException, InterruptedException {
+
+        java.util.List<String> cmd = new java.util.ArrayList<>();
+        cmd.add(System.getProperty("java.home") + "/bin/java");
+        cmd.add("-Dsun.java2d.uiScale=2");
+        cmd.add("-Dswingy.relaunched=true");
+        cmd.add("-cp");
+        cmd.add(System.getProperty("java.class.path"));
+        cmd.add(Main.class.getName());
+        for (String a : args) cmd.add(a);
+
+        Process child = new ProcessBuilder(cmd).inheritIO().start();
+        int exitCode = child.waitFor();
+
+        // Only take over the parent's exit code if the child actually completed.
+        // If the child crashed, fall through so the user sees why in this JVM.
+        System.exit(exitCode);
     }
 
     /**
@@ -93,3 +124,4 @@ public final class Main {
         System.err.println("  mode: console | gui");
     }
 }
+

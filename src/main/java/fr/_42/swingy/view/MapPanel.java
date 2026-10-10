@@ -23,9 +23,6 @@ public class MapPanel extends JPanel {
     }
 
     public void setState(GameMap map, Hero hero) {
-        System.out.println("[MapPanel] setState map=" + map
-            + " size=" + (map != null ? map.getSize() : -1)
-            + " hero=" + hero);
         this.map = map;
         this.hero = hero;
 

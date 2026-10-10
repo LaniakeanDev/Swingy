@@ -39,12 +39,12 @@ public class GuiView implements View {
         mapScroll.getViewport().setBackground(Color.BLACK);
 
         // Log below the map
-        log = new JTextArea(6, 40);
+        log = new JTextArea(10, 60);
         log.setEditable(false);
         log.setFont(new Font("Monospaced", Font.PLAIN, 14));
         log.setMargin(new Insets(6, 6, 6, 6));
         JScrollPane logScroll = new JScrollPane(log);
-        logScroll.setPreferredSize(new Dimension(640, 120));
+        logScroll.setPreferredSize(new Dimension(1280, 200));
 
         // Buttons for input
         actionBar = new ActionBar(cmd -> inputQueue.offer(cmd));
@@ -58,6 +58,8 @@ public class GuiView implements View {
         frame.getContentPane().add(south,      BorderLayout.SOUTH);
 
         frame.pack();
+        frame.setSize(1280, 900);
+        frame.setMinimumSize(new Dimension(900, 700));
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
     }
@@ -68,7 +70,6 @@ public class GuiView implements View {
 
     @Override
     public void renderMap(GameMap map, Hero hero) {
-        System.out.println("[GuiView] renderMap called");
         SwingUtilities.invokeLater(() -> mapPanel.setState(map, hero));
     }
 

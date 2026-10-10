@@ -31,6 +31,7 @@ public class GameController {
     private List<Hero> heroList = new ArrayList<>();
     private final Random random;
     private final BattleSimulator battleSimulator;
+    private GameState persistedState;
 
     // Marker returned by the hero-selection dialog for "create new".
     private static final String NEW_HERO_CHOICE = "+ Create new hero";
@@ -64,8 +65,8 @@ public class GameController {
     // ---------------------------------------------------------------
 
     public void run() {
-        GameState state = repository.load();
-        heroList = new ArrayList<>(state.roster);
+        persistedState = repository.load();
+        heroList = new ArrayList<>(persistedState.roster);
 
         try {
             while ((currentHero = mainMenu()) == null) {
@@ -74,7 +75,7 @@ public class GameController {
 
             int expectedSize = mapSizeFor(currentHero.getLevel());
 
-            Session saved = state.sessions.get(currentHero.getName());
+            Session saved = persistedState.sessions.get(currentHero.getName());
             boolean canResume = saved != null && saved.mapSize == expectedSize;
 
             map = new GameMap(expectedSize, random);
@@ -106,10 +107,11 @@ public class GameController {
     }
 
     private void saveRosterOnly() {
-        GameState state = new GameState();
-        state.roster = heroList;
-        state.sessions = new java.util.LinkedHashMap<>();
-        repository.save(state);
+        persistedState.roster = heroList;
+        if (persistedState.sessions == null) {
+            persistedState.sessions = new java.util.LinkedHashMap<>();
+        }
+        repository.save(persistedState);
         view.displayMessage("Your hero(es) have been saved.");
     }
 
@@ -121,14 +123,17 @@ public class GameController {
             return;
         }
 
-        GameState state = new GameState();
-        state.roster = heroList;
-        state.sessions = new java.util.LinkedHashMap<>();
-        state.sessions.put(
+        persistedState.roster = heroList;
+        // Ensure sessions map exists (it may be null if load() built it oddly).
+        if (persistedState.sessions == null) {
+            persistedState.sessions = new java.util.LinkedHashMap<>();
+        }
+        // Merge: keep every other hero's session, replace only the current one.
+        persistedState.sessions.put(
                 currentHero.getName(),
                 new Session(map.getSize(), map.getVillains()));
 
-        repository.save(state);
+        repository.save(persistedState);
         view.displayMessage("Your game has been saved.");
     }
 
