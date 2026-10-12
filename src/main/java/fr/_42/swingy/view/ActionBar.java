@@ -6,28 +6,41 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * Two-row action bar:
- *   - top row: primary commands (Create New Hero, Quit, ...)
- *   - bottom row: contextual choices (hero selection, in-game actions)
+ * Two-section action bar:
+ *   - top: primary commands (Create New Hero, Quit, ...) as a horizontal row
+ *   - bottom: contextual choices (hero selection, in-game actions) as a centred column
  * Each button click pushes its label into the command consumer.
  */
 class ActionBar extends JPanel {
 
     private final Consumer<String> onCommand;
-    private final JPanel primaryRow = new JPanel(new FlowLayout(FlowLayout.CENTER, 12, 6));
-    private final JPanel choiceRow  = new JPanel(new FlowLayout(FlowLayout.CENTER, 12, 6));
 
-    ActionBar(Consumer<String> onCommand) {
+    private final JPanel primaryRow = new JPanel(new FlowLayout(FlowLayout.CENTER, 12, 6));
+
+    // Column wrapper: FlowLayout(CENTER) keeps the column horizontally centred;
+    // GridLayout(0,1,gap,gap) stacks the buttons with a uniform vertical gap.
+    private JPanel choiceColumn;
+    private final JPanel choiceWrapper = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
+
+    ActionBar(Consumer<String> onCommand, boolean verticalLayout) {
         this.onCommand = onCommand;
+        if (verticalLayout) {
+            choiceColumn = new JPanel(new GridLayout(0, 1, 0, 8));
+        } else {
+            choiceColumn = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 8));
+        }
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
         setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
         primaryRow.setOpaque(false);
-        choiceRow.setOpaque(false);
+        choiceColumn.setOpaque(false);
+        choiceWrapper.setOpaque(false);
+
+        choiceWrapper.add(choiceColumn);
 
         add(primaryRow);
-        add(Box.createVerticalStrut(4));
-        add(choiceRow);
+        add(Box.createVerticalStrut(8));
+        add(choiceWrapper);
     }
 
     void setPrimaryActions(List<String> labels) {
@@ -40,19 +53,19 @@ class ActionBar extends JPanel {
     }
 
     void setChoices(List<String> labels) {
-        choiceRow.removeAll();
+        choiceColumn.removeAll();
         for (String label : labels) {
-            choiceRow.add(makeButton(label, false));
+            choiceColumn.add(makeButton(label, false));
         }
-        choiceRow.revalidate();
-        choiceRow.repaint();
+        choiceColumn.revalidate();
+        choiceColumn.repaint();
     }
 
     private JButton makeButton(String label, boolean primary) {
         JButton b = new JButton(label);
         b.setFont(new Font("SansSerif", primary ? Font.BOLD : Font.PLAIN, primary ? 16 : 15));
         b.setMargin(new Insets(8, 18, 8, 18));
-        b.setFocusPainted(false);
+        b.setFocusPainted(true);
         if (primary) {
             b.setBackground(new Color(60, 120, 200));
             b.setForeground(Color.WHITE);

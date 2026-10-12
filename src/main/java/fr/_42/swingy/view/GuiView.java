@@ -78,7 +78,7 @@ public class GuiView implements View {
         center.setOpaque(false);
         center.add(title, BorderLayout.NORTH);
 
-        menuActions = new ActionBar(cmd -> inputQueue.offer(cmd));
+        menuActions = new ActionBar(cmd -> inputQueue.offer(cmd), true);
         center.add(menuActions, BorderLayout.CENTER);
 
         wrapper.add(center, BorderLayout.CENTER);
@@ -119,7 +119,7 @@ public class GuiView implements View {
         logScroll.setBorder(BorderFactory.createTitledBorder("Log"));
 
         // -- Actions --
-        gameActions = new ActionBar(cmd -> inputQueue.offer(cmd));
+        gameActions = new ActionBar(cmd -> inputQueue.offer(cmd), false);
 
         JPanel south = new JPanel(new BorderLayout());
         south.add(logScroll,   BorderLayout.CENTER);
