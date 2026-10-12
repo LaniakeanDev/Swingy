@@ -13,11 +13,23 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 public class GuiView implements View {
 
-    private JFrame frame;
-    private MapPanel mapPanel;
-    private JTextArea log;
-    private ActionBar actionBar;
+    private static final String CARD_MENU = "menu";
+    private static final String CARD_GAME = "game";
 
+    private JFrame frame;
+    private CardLayout cards;
+    private JPanel root;
+
+    // Menu screen
+    private JPanel menuPanel;
+    private ActionBar menuActions;
+
+    // Game screen
+    private MapPanel mapPanel;
+    private StatsPanel statsPanel;
+    private JTextArea log;
+    private ActionBar gameActions;
+    private InventoryPanel inventoryPanel;
     private final BlockingQueue<String> inputQueue = new LinkedBlockingQueue<>();
 
     public GuiView() {
@@ -28,40 +40,110 @@ public class GuiView implements View {
         }
     }
 
+    // ---------------------------------------------------------------
+    // UI construction
+    // ---------------------------------------------------------------
+
     private void buildUi() {
         frame = new JFrame("Swingy");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
-        // Map on top (scrollable in case the map is bigger than the window)
+        cards = new CardLayout();
+        root  = new JPanel(cards);
+
+        menuPanel = buildMenuPanel();
+        root.add(menuPanel, CARD_MENU);
+
+        root.add(buildGamePanel(), CARD_GAME);
+
+        frame.setContentPane(root);
+        frame.setMinimumSize(new Dimension(1000, 700));
+        frame.setSize(1280, 860);
+        frame.setLocationRelativeTo(null);
+        frame.setVisible(true);
+
+        cards.show(root, CARD_MENU);
+    }
+
+    private JPanel buildMenuPanel() {
+        JPanel wrapper = new JPanel(new BorderLayout());
+        wrapper.setBackground(new Color(30, 30, 40));
+
+        JLabel title = new JLabel("SWINGY", SwingConstants.CENTER);
+        title.setFont(new Font("Serif", Font.BOLD, 72));
+        title.setForeground(new Color(230, 200, 100));
+        title.setBorder(BorderFactory.createEmptyBorder(60, 0, 40, 0));
+
+        JPanel center = new JPanel(new BorderLayout());
+        center.setOpaque(false);
+        center.add(title, BorderLayout.NORTH);
+
+        menuActions = new ActionBar(cmd -> inputQueue.offer(cmd));
+        center.add(menuActions, BorderLayout.CENTER);
+
+        wrapper.add(center, BorderLayout.CENTER);
+        return wrapper;
+    }
+
+    private JPanel buildGamePanel() {
+        JPanel wrapper = new JPanel(new BorderLayout());
+
+        // -- Center: map + side stats --
         mapPanel = new MapPanel();
         JScrollPane mapScroll = new JScrollPane(mapPanel);
-        mapScroll.setPreferredSize(new Dimension(640, 480));
         mapScroll.getViewport().setBackground(Color.BLACK);
+        mapScroll.setBorder(BorderFactory.createLineBorder(new Color(60, 60, 60)));
 
-        // Log below the map
-        log = new JTextArea(10, 60);
+        statsPanel = new StatsPanel();
+        // statsPanel.setPreferredSize(new Dimension(260, 0));
+
+        inventoryPanel = new InventoryPanel();
+
+        JPanel side = new JPanel(new BorderLayout());
+        side.setPreferredSize(new Dimension(500, 0));
+        side.add(statsPanel,     BorderLayout.NORTH);
+        side.add(inventoryPanel, BorderLayout.CENTER);
+
+        JPanel center = new JPanel(new BorderLayout());
+        center.add(mapScroll, BorderLayout.CENTER);
+        center.add(side,      BorderLayout.EAST);
+
+        // -- Log --
+        log = new JTextArea(8, 60);
         log.setEditable(false);
         log.setFont(new Font("Monospaced", Font.PLAIN, 14));
         log.setMargin(new Insets(6, 6, 6, 6));
+        log.setBackground(new Color(20, 20, 25));
+        log.setForeground(new Color(220, 220, 220));
         JScrollPane logScroll = new JScrollPane(log);
-        logScroll.setPreferredSize(new Dimension(1280, 200));
+        logScroll.setBorder(BorderFactory.createTitledBorder("Log"));
 
-        // Buttons for input
-        actionBar = new ActionBar(cmd -> inputQueue.offer(cmd));
+        // -- Actions --
+        gameActions = new ActionBar(cmd -> inputQueue.offer(cmd));
 
-        // Layout: map center, log south, actions at the very bottom
         JPanel south = new JPanel(new BorderLayout());
         south.add(logScroll,   BorderLayout.CENTER);
-        south.add(actionBar,   BorderLayout.SOUTH);
+        south.add(gameActions, BorderLayout.SOUTH);
 
-        frame.getContentPane().add(mapScroll, BorderLayout.CENTER);
-        frame.getContentPane().add(south,      BorderLayout.SOUTH);
+        wrapper.add(center, BorderLayout.CENTER);
+        wrapper.add(south,  BorderLayout.SOUTH);
+        return wrapper;
+    }
 
-        frame.pack();
-        frame.setSize(1280, 900);
-        frame.setMinimumSize(new Dimension(900, 700));
-        frame.setLocationRelativeTo(null);
-        frame.setVisible(true);
+    // ---------------------------------------------------------------
+    // Screen switching (call from controller)
+    // ---------------------------------------------------------------
+
+    public void showMenu() {
+        SwingUtilities.invokeLater(() -> {
+            menuActions.setChoices(List.of());
+            menuActions.setPrimaryActions(List.of());
+            cards.show(root, CARD_MENU);
+        });
+    }
+
+    public void showGame() {
+        SwingUtilities.invokeLater(() -> cards.show(root, CARD_GAME));
     }
 
     // ---------------------------------------------------------------
@@ -70,12 +152,19 @@ public class GuiView implements View {
 
     @Override
     public void renderMap(GameMap map, Hero hero) {
-        SwingUtilities.invokeLater(() -> mapPanel.setState(map, hero));
+        SwingUtilities.invokeLater(() -> {
+            mapPanel.setState(map, hero);
+            statsPanel.update(hero);
+            inventoryPanel.update(hero);
+        });
     }
 
     @Override
     public void displayMessage(String m) {
-        SwingUtilities.invokeLater(() -> log.append(m + "\n"));
+        SwingUtilities.invokeLater(() -> {
+            log.append(m + "\n");
+            log.setCaretPosition(log.getDocument().getLength());
+        });
     }
 
     @Override
@@ -85,18 +174,12 @@ public class GuiView implements View {
 
     @Override
     public void showHeroStats(Hero hero) {
-        displayMessage(String.format(
-                "%s the %s — Lvl %d | XP %d/%d | ATK %d | DEF %d | HP %d/%d",
-                hero.getName(), hero.getHeroClass().displayName(),
-                hero.getLevel(), hero.getExperience(), hero.experienceToNextLevel(),
-                hero.getAttack(), hero.getDefense(),
-                hero.getCurrentHitPoints(), hero.getHitPoints()));
+        SwingUtilities.invokeLater(() -> {
+            statsPanel.update(hero);
+            inventoryPanel.update(hero);
+        });
     }
 
-    /**
-     * Pushes button labels into the action bar, then blocks until the user
-     * clicks one. The game loop continues to use askInput as before.
-     */
     @Override
     public String askInput(String prompt) {
         displayMessage("> " + prompt);
@@ -108,16 +191,22 @@ public class GuiView implements View {
         }
     }
 
+    /**
+     * Purges any button clicks that were enqueued but never consumed.
+     * Called by the controller right before each blocking prompt so that
+     * a stray click from a previous screen can't be picked up by the next one.
+     */
+    public void drainInput() {
+        inputQueue.clear();
+    }
+
     @Override
     public String askText(String prompt) {
-        // Must run on the EDT, but showInputDialog blocks the calling (game) thread
-        // which is exactly what we want.
         final String[] result = new String[1];
         try {
-            SwingUtilities.invokeAndWait(() -> {
+            SwingUtilities.invokeAndWait(() ->
                 result[0] = JOptionPane.showInputDialog(
-                        frame, prompt, "Input", JOptionPane.PLAIN_MESSAGE);
-            });
+                        frame, prompt, "Input", JOptionPane.PLAIN_MESSAGE));
         } catch (Exception e) {
             return null;
         }
@@ -125,16 +214,31 @@ public class GuiView implements View {
     }
 
     // ---------------------------------------------------------------
-    // NEW: tell the action bar which buttons to show
+    // Action bar API
     // ---------------------------------------------------------------
 
-    /** Optional API: call this from the controller whenever the state changes. */
-    public void setActions(List<String> labels) {
-        SwingUtilities.invokeLater(() -> actionBar.setActions(labels));
+    /** Primary commands (Create New Hero, Quit, Back, …) — menu screen. */
+    public void setMenuPrimaryActions(List<String> labels) {
+        SwingUtilities.invokeLater(() -> menuActions.setPrimaryActions(labels));
+    }
+
+    /** Hero choices (or any secondary options) — menu screen. */
+    public void setMenuChoices(List<String> labels) {
+        SwingUtilities.invokeLater(() -> menuActions.setChoices(labels));
+    }
+
+    /** Primary commands on the game screen (Save, Quit, Back to menu, …). */
+    public void setGamePrimaryActions(List<String> labels) {
+        SwingUtilities.invokeLater(() -> gameActions.setPrimaryActions(labels));
+    }
+
+    /** In-game context choices (Move N/S/E/W, Fight, Run, …). */
+    public void setGameChoices(List<String> labels) {
+        SwingUtilities.invokeLater(() -> gameActions.setChoices(labels));
     }
 
     // ---------------------------------------------------------------
-    // Dialogs (unchanged from your original except title fix)
+    // Dialogs
     // ---------------------------------------------------------------
 
     @Override
@@ -165,12 +269,10 @@ public class GuiView implements View {
                         message, JOptionPane.INFORMATION_MESSAGE, JOptionPane.DEFAULT_OPTION);
                 JDialog dialog = pane.createDialog(frame, title);
 
-                // Scale every button
                 for (Component c : pane.getComponents()) {
                     if (c instanceof JPanel) {
                         for (Component inner : ((JPanel) c).getComponents()) {
-                            if (inner instanceof JButton) {
-                                JButton btn = (JButton) inner;
+                            if (inner instanceof JButton btn) {
                                 btn.setFont(new Font("Monospaced", Font.BOLD, 24));
                                 btn.setMargin(new Insets(10, 30, 10, 30));
                             }
@@ -198,23 +300,6 @@ public class GuiView implements View {
         if (frame != null) SwingUtilities.invokeLater(() -> frame.dispose());
     }
 
-    /** Show one button per hero; askInput() will return the chosen label. */
-    public void setHeroChoices(List<String> labels) {
-        SwingUtilities.invokeLater(() -> actionBar.setChoices(labels));
-    }
+    // Kept for backwards compat — routes to menu choices
+    public void setHeroChoices(List<String> labels) { setMenuChoices(labels); }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

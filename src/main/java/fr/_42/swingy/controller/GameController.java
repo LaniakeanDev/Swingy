@@ -23,18 +23,48 @@ import fr._42.swingy.view.View;
 
 public class GameController {
 
+    // ---------------------------------------------------------------
+    // Constants
+    // ---------------------------------------------------------------
+
+    private static final String NEW_HERO_CHOICE = "+ Create new hero";
+    private static final String QUIT_CHOICE     = "Quit";
+    private static final String QUIT_TO_MENU    = "Quit to Menu";
+
+    // ---------------------------------------------------------------
+    // State
+    // ---------------------------------------------------------------
+
     private final View view;
     private final Validator validator;
     private final GameRepository repository;
-    private GameMap map;
-    private Hero currentHero;
-    private List<Hero> heroList = new ArrayList<>();
     private final Random random;
     private final BattleSimulator battleSimulator;
-    private GameState persistedState;
 
-    // Marker returned by the hero-selection dialog for "create new".
-    private static final String NEW_HERO_CHOICE = "+ Create new hero";
+    private GameState persistedState;
+    private List<Hero> heroList = new ArrayList<>();
+
+    private GameMap map;
+    private Hero currentHero;
+
+    /** Signals to {@link #run()} that the game loop exited back to the menu. */
+    private boolean returnToMenu = false;
+
+    /** Why the last game session ended, if it ended. Used for menu flavour. */
+    private enum EndReason { NONE, QUIT, WIN, LOSS }
+    private EndReason lastEnd = EndReason.NONE;
+
+    /** Result of attempting a move — tells the game loop how to proceed. */
+    private enum MoveOutcome {
+        CONTINUE,       // hero moved; keep playing
+        BLOCKED,        // villain blocked the path (fled or off-map)
+        HERO_DIED,      // loss dialog shown; caller should end the game
+        HERO_WON        // border reached; caller should end the game
+    }
+
+    // ---------------------------------------------------------------
+    // Construction
+    // ---------------------------------------------------------------
 
     public GameController(View view, Validator validator,
                           GameRepository repository, Random random) {
@@ -46,22 +76,48 @@ public class GameController {
     }
 
     // ---------------------------------------------------------------
-    // Small helper: route setActions/setHeroChoices only when GUI
+    // GUI routing helpers (no-ops for the console View)
     // ---------------------------------------------------------------
 
-    private void showActions(List<String> labels) {
-        if (view instanceof GuiView gv) {
-            gv.setActions(labels);
-        }
-        // Console view ignores this and waits on askInput as before.
+    private void showMenuPrimaryActions(List<String> labels) {
+        if (view instanceof GuiView gv) gv.setMenuPrimaryActions(labels);
     }
 
-    private void showHeroChoices(List<String> labels) {
-        if (view instanceof GuiView gv) {
-            gv.setHeroChoices(labels);
-        }
+    private void showMenuChoices(List<String> labels) {
+        if (view instanceof GuiView gv) gv.setMenuChoices(labels);
     }
 
+    private void showGamePrimaryActions(List<String> labels) {
+        if (view instanceof GuiView gv) gv.setGamePrimaryActions(labels);
+    }
+
+    private void showGameChoices(List<String> labels) {
+        if (view instanceof GuiView gv) gv.setGameChoices(labels);
+    }
+
+    private void switchToMenu() {
+        if (view instanceof GuiView gv) gv.showMenu();
+    }
+
+    private void switchToGame() {
+        if (view instanceof GuiView gv) gv.showGame();
+    }
+
+    /**
+     * Ask the view for input, but sanitise the queue first so that any
+     * button click that arrived between prompts (i.e. a click on the
+     * previous screen's buttons before the new buttons rendered) doesn't
+     * leak into this prompt.
+     */
+    private String prompt(String message) {
+        if (view instanceof GuiView gv) {
+            gv.drainInput();
+        }
+        return view.askInput(message).trim();
+    }
+
+    // ---------------------------------------------------------------
+    // Entry point — outer loop so "Quit to Menu" really returns to menu
     // ---------------------------------------------------------------
 
     public void run() {
@@ -69,42 +125,78 @@ public class GameController {
         heroList = new ArrayList<>(persistedState.roster);
 
         try {
-            while ((currentHero = mainMenu()) == null) {
-                view.displayMessage("No hero selected. Let's try again.");
+            boolean appRunning = true;
+
+            while (appRunning) {
+                // --- Menu phase ---------------------------------------------
+                switchToMenu();
+                currentHero = mainMenu();
+
+                if (currentHero == null) {           // user clicked "Quit"
+                    view.displayMessage("Goodbye.");
+                    appRunning = false;
+                    continue;
+                }
+
+                // --- Session setup -----------------------------------------
+                prepareSession();
+
+                // --- Play phase --------------------------------------------
+                switchToGame();
+                returnToMenu = false;
+                lastEnd = EndReason.NONE;
+
+                gameLoop();
+
+                if (returnToMenu) {
+                    view.displayMessage("Returning to main menu.");
+                    // Session already flushed inside gameLoop's exit path.
+                    map = null;
+                    currentHero = null;
+                    continue;
+                }
+
+                // Game ended via win/loss without returnToMenu — shouldn't
+                // happen because gameLoop sets returnToMenu on those too.
+                appRunning = false;
             }
 
-            int expectedSize = mapSizeFor(currentHero.getLevel());
-
-            Session saved = persistedState.sessions.get(currentHero.getName());
-            boolean canResume = saved != null && saved.mapSize == expectedSize;
-
-            map = new GameMap(expectedSize, random);
-            if (currentHero.getPosition() == null) {
-                currentHero.setPosition(map.center());
-            }
-            map.placeHero(currentHero, currentHero.getPosition());
-
-            if (canResume) {
-                map.replaceVillains(saved.villains);
-                view.displayMessage("Resuming saved session.");
-            } else {
-                map.generateVillains(villainCountFor(expectedSize),
-                                     currentHero.getLevel());
-            }
-
-            gameLoop();
         } catch (Exception e) {
             view.displayError("Fatal error: " + e.getMessage());
             e.printStackTrace();
         } finally {
-            if (map != null && currentHero != null) {
-                saveAndExit();
-            } else if (heroList != null && !heroList.isEmpty()) {
+            // Only flush the roster here; per-session saves happen inline.
+            if (heroList != null && !heroList.isEmpty()) {
                 saveRosterOnly();
             }
             view.close();
         }
     }
+
+    /** Builds/restores the map for the currently selected hero. */
+    private void prepareSession() {
+        int expectedSize = mapSizeFor(currentHero.getLevel());
+        Session saved    = persistedState.sessions.get(currentHero.getName());
+        boolean canResume = saved != null && saved.mapSize == expectedSize;
+
+        map = new GameMap(expectedSize, random);
+        if (currentHero.getPosition() == null) {
+            currentHero.setPosition(map.center());
+        }
+        map.placeHero(currentHero, currentHero.getPosition());
+
+        if (canResume) {
+            map.replaceVillains(saved.villains);
+            view.displayMessage("Resuming saved session.");
+        } else {
+            map.generateVillains(villainCountFor(expectedSize),
+                                 currentHero.getLevel());
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // Persistence
+    // ---------------------------------------------------------------
 
     private void saveRosterOnly() {
         persistedState.roster = heroList;
@@ -124,7 +216,6 @@ public class GameController {
         }
 
         persistedState.roster = heroList;
-        // Ensure sessions map exists (it may be null if load() built it oddly).
         if (persistedState.sessions == null) {
             persistedState.sessions = new java.util.LinkedHashMap<>();
         }
@@ -141,22 +232,30 @@ public class GameController {
         return Math.max(2, mapSize / 3);
     }
 
+    private int mapSizeFor(int level) {
+        return (level - 1) * 5 + 10 - (level % 2);
+    }
+
     // ---------------------------------------------------------------
-    // Game loop — buttons for moves
+    // Game loop
     // ---------------------------------------------------------------
 
     private void gameLoop() {
-        List<String> moves = List.of("North", "East", "South", "West", "Exit");
+        showGamePrimaryActions(List.of(QUIT_TO_MENU));
+        List<String> moveChoices = List.of("North", "East", "South", "West");
 
         boolean running = true;
         while (running) {
             view.renderMap(map, currentHero);
             view.showHeroStats(currentHero);
+            showGameChoices(moveChoices);
+            String input = prompt("Choose an action");
 
-            showActions(moves);
-            String input = view.askInput("Choose an action").trim();
-
-            if ("exit".equalsIgnoreCase(input)) {
+            if (QUIT_TO_MENU.equalsIgnoreCase(input)) {
+                view.displayMessage("Saving and returning to menu…");
+                saveAndExit();
+                lastEnd = EndReason.QUIT;
+                returnToMenu = true;
                 running = false;
                 continue;
             }
@@ -167,77 +266,124 @@ public class GameController {
                 continue;
             }
 
-            handleMove(dir);
+            MoveOutcome outcome = handleMove(dir);
+            switch (outcome) {
+                case HERO_WON -> {
+                    lastEnd = EndReason.WIN;
+                    returnToMenu = true;
+                    running = false;
+                }
+                case HERO_DIED -> {
+                    lastEnd = EndReason.LOSS;
+                    returnToMenu = true;
+                    running = false;
+                }
+                case CONTINUE, BLOCKED -> { /* keep playing */ }
+            }
         }
     }
 
-    private int mapSizeFor(int level) {
-        return (level - 1) * 5 + 10 - (level % 2);
-    }
+    // ---------------------------------------------------------------
+    // Movement
+    // ---------------------------------------------------------------
 
-    private void handleMove(Direction dir) {
+    /**
+     * Attempt to move the hero one tile in {@code dir}.
+     * Returns how the game loop should proceed. Never calls System.exit —
+     * the caller decides what "game over" means (return to menu, quit, etc.).
+     */
+    private MoveOutcome handleMove(Direction dir) {
         Position current = currentHero.getPosition();
         Position next    = map.getNextPosition(current, dir);
 
         if (!map.isInside(next)) {
             view.displayError("You can't leave the map.");
-            return;
+            return MoveOutcome.BLOCKED;
         }
 
         Villain villain = map.getVillainAt(next);
         if (villain != null) {
-            EncounterResult result = handleEncounter(currentHero, villain);
-            switch (result) {
-                case HERO_WON -> {
-                    view.displayMessage("You defeated " + villain.getName() + "!");
-                    map.removeVillain(villain);
-                    currentHero.setPosition(next);
-                }
-                case HERO_FLED -> {
-                    view.displayMessage("You fled. The villain still blocks the path.");
-                    return;
-                }
-                case HERO_LOST -> {
-                    view.displayMessage("You were defeated. Game over.");
-                    view.showLossDialog(currentHero, villain);
-                    saveAndExit();
-                    System.exit(0);
-                    return;
-                }
+            MoveOutcome combat = resolveEncounter(currentHero, villain, next);
+            if (combat != MoveOutcome.CONTINUE) {
+                return combat;   // fled, died, or otherwise did not move
             }
         } else {
+            // Plain move — no opposition.
             currentHero.setPosition(next);
         }
 
+        // Win check runs after the hero is standing on the target tile.
         if (map.isBorder(next)) {
             view.displayMessage("You reached the border — you win!");
             view.showWinDialog(currentHero);
             saveAndExit();
-            System.exit(0);
+            return MoveOutcome.HERO_WON;
+        }
+
+        return MoveOutcome.CONTINUE;
+    }
+
+    /**
+     * Fight/run the villain standing on {@code target}. On a win, moves the
+     * hero onto the tile and removes the villain. Returns:
+     *   CONTINUE   — hero won and moved onto the tile
+     *   BLOCKED    — hero fled, tile still occupied
+     *   HERO_DIED  — hero lost (dialog shown, session saved)
+     */
+    private MoveOutcome resolveEncounter(Hero hero, Villain villain, Position target) {
+        EncounterResult result = handleEncounter(hero, villain);
+        switch (result) {
+            case HERO_WON -> {
+                view.displayMessage("You defeated " + villain.getName() + "!");
+                map.removeVillain(villain);
+                hero.setPosition(target);
+                return MoveOutcome.CONTINUE;
+            }
+            case HERO_FLED -> {
+                view.displayMessage("You fled. The villain still blocks the path.");
+                return MoveOutcome.BLOCKED;
+            }
+            case HERO_LOST -> {
+                view.displayMessage("You were defeated. Game over.");
+                view.showLossDialog(hero, villain);
+                saveAndExit();
+                return MoveOutcome.HERO_DIED;
+            }
+            default -> {
+                return MoveOutcome.CONTINUE;
+            }
         }
     }
 
     // ---------------------------------------------------------------
-    // Main menu — click a hero, or click "+ Create new hero"
+    // Main menu — "Create" / "Quit" on primary row, heroes on choice row
     // ---------------------------------------------------------------
 
     private Hero mainMenu() {
+        announceMenuContext();
         view.displayMessage("Welcome to Swingy!");
 
         while (true) {
-            List<String> labels = new ArrayList<>();
-            for (Hero h : heroList) {
-                labels.add(h.getName() + "  (Lvl " + h.getLevel() + ")");
-            }
-            labels.add(NEW_HERO_CHOICE);   // always the last option
+            // Primary row — never mixed with the hero buttons.
+            showMenuPrimaryActions(List.of(NEW_HERO_CHOICE, QUIT_CHOICE));
 
-            showHeroChoices(labels);
-            String choice = view.askInput("Choose a hero").trim();
+            // Choice row — one button per saved hero.
+            List<String> heroLabels = new ArrayList<>();
+            for (Hero h : heroList) {
+                heroLabels.add(h.getName() + "  (Lvl " + h.getLevel() + ")");
+            }
+            showMenuChoices(heroLabels);
+
+            String choice = prompt("Choose a hero");
 
             if (NEW_HERO_CHOICE.equalsIgnoreCase(choice)) {
                 Hero created = createNewHero();
                 if (created != null) return created;
                 continue;   // creation cancelled or failed → show menu again
+            }
+
+            if (QUIT_CHOICE.equalsIgnoreCase(choice)) {
+                return null;
             }
 
             // Match by prefix (the label is "Name  (Lvl N)").
@@ -250,8 +396,19 @@ public class GameController {
         }
     }
 
+    /** Greets the player based on the previous session's ending. */
+    private void announceMenuContext() {
+        switch (lastEnd) {
+            case WIN  -> view.displayMessage("Welcome back, champion.");
+            case LOSS -> view.displayMessage("That was rough. Try again?");
+            case QUIT -> view.displayMessage("Session saved.");
+            case NONE -> { /* first run, no greeting needed */ }
+        }
+        lastEnd = EndReason.NONE;
+    }
+
     // ---------------------------------------------------------------
-    // Hero creation — class picked from buttons, name via askText
+    // Hero creation
     // ---------------------------------------------------------------
 
     private HeroClass askHeroClass() {
@@ -261,8 +418,8 @@ public class GameController {
         }
 
         while (true) {
-            showActions(labels);
-            String choice = view.askInput("Choose a hero class").trim();
+            showMenuPrimaryActions(labels);
+            String choice = prompt("Choose a hero class");
 
             HeroClass heroClass = HeroClass.fromString(choice);
             if (heroClass != null) {
@@ -317,7 +474,7 @@ public class GameController {
     }
 
     // ---------------------------------------------------------------
-    // Encounters — Fight / Run buttons, then Keep / Discard buttons
+    // Encounters — Fight / Run, then Keep / Discard (choice row)
     // ---------------------------------------------------------------
 
     private EncounterResult handleEncounter(Hero hero, Villain villain) {
@@ -325,8 +482,8 @@ public class GameController {
                 "A %s (power %d) blocks your path!",
                 villain.getName(), villain.getAttack()));
 
-        showActions(List.of("Fight", "Run"));
-        String choice = view.askInput("Fight or Run?").trim().toLowerCase();
+        showGameChoices(List.of("Fight", "Run"));
+        String choice = prompt("Fight or Run?").toLowerCase();
         if (choice.startsWith("r")) {
             if (random.nextBoolean()) {
                 return EncounterResult.HERO_FLED;
@@ -341,15 +498,31 @@ public class GameController {
         return report.result();
     }
 
+    /**
+     * Ask the player whether to keep the dropped artifact.
+     *
+     * The queue is drained in {@link #prompt(String)}, so stale clicks from
+     * the Fight/Run row cannot leak into this prompt. Choices are matched
+     * defensively so unexpected input is logged rather than silently
+     * treated as "discard".
+     */
     private void promptKeepArtifact(Hero hero, Artifact artifact) {
-        showActions(List.of("Keep", "Discard"));
-        String keep = view.askInput(
-                "Keep " + artifact.getName() + "?").trim().toLowerCase();
+        showGameChoices(List.of("Keep", "Discard"));
+        String answer = prompt("Keep " + artifact.getName() + "?").toLowerCase();
 
-        if (!keep.startsWith("k") && !keep.startsWith("y")) {
+        boolean wantsKeep    = answer.startsWith("k") || answer.startsWith("y");
+        boolean wantsDiscard = answer.startsWith("d") || answer.startsWith("n");
+
+        if (!wantsKeep && !wantsDiscard) {
+            view.displayError("Unrecognised choice '" + answer
+                    + "' — leaving " + artifact.getName() + " behind.");
+            return;
+        }
+        if (wantsDiscard) {
             view.displayMessage("You leave it behind.");
             return;
         }
+
         if (hero.equipArtifact(artifact)) {
             view.displayMessage("Equipped " + artifact.getName() + ".");
         } else {
@@ -357,337 +530,3 @@ public class GameController {
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-// package fr._42.swingy.controller;
-// import java.util.ArrayList;
-// import java.util.List;
-// import java.util.Optional;
-// import java.util.Random;
-
-// import fr._42.swingy.model.entity.Artifact;
-// import fr._42.swingy.model.entity.Hero;
-// import fr._42.swingy.model.entity.Villain;
-// import fr._42.swingy.model.enums.EncounterResult;
-// import fr._42.swingy.model.enums.HeroClass;
-// import fr._42.swingy.model.enums.Direction;
-// import fr._42.swingy.model.map.GameMap;
-// import fr._42.swingy.model.map.Position;
-// import fr._42.swingy.model.battle.BattleReport;
-// import fr._42.swingy.model.battle.BattleSimulator;
-// import fr._42.swingy.persistence.GameRepository;
-// import fr._42.swingy.persistence.GameRepository.GameState;
-// import fr._42.swingy.persistence.GameRepository.GameState.Session;
-// import fr._42.swingy.validation.Validator;
-// import fr._42.swingy.view.View;
-
-// public class GameController {
-
-//     private final View view;
-//     private final Validator validator;
-//     private final GameRepository repository;
-//     private GameMap map;
-//     private Hero currentHero;
-//     private List<Hero> heroList = new ArrayList<>();
-//     private final Random random;
-//     private final BattleSimulator battleSimulator;
-
-//     public GameController(View view, Validator validator, GameRepository repository, Random random) {
-//         this.view = view;
-//         this.validator = validator;
-//         this.repository = repository;
-//         this.random = random;
-//         this.battleSimulator = new BattleSimulator(random);
-//     }
-
-//     public void run() {
-//         GameState state = repository.load();
-//         heroList = new ArrayList<>(state.roster);
-
-//         try {
-//             while ((currentHero = mainMenu()) == null) {
-//                 view.displayMessage("No hero selected. Let's try again.");
-//             }
-
-//             int expectedSize = mapSizeFor(currentHero.getLevel());
-
-//             // Resume only if this hero has a saved session AND the map size
-//             // on disk still matches what this hero's level implies.
-//             Session saved = state.sessions.get(currentHero.getName());
-//             boolean canResume = saved != null
-//                     && saved.mapSize == expectedSize;
-
-//             map = new GameMap(expectedSize, random);
-//             if (currentHero.getPosition() == null) {
-//                 currentHero.setPosition(map.center());
-//             }
-//             map.placeHero(currentHero, currentHero.getPosition());
-
-//             if (canResume) {
-//                 map.replaceVillains(saved.villains);
-//                 view.displayMessage("Resuming saved session.");
-//             } else {
-//                 map.generateVillains(villainCountFor(expectedSize), currentHero.getLevel());
-//             }
-
-//             gameLoop();
-//         } catch (Exception e) {
-//             view.displayError("Fatal error: " + e.getMessage());
-//             e.printStackTrace();
-//         } finally {
-//             if (map != null && currentHero != null) {
-//                 saveAndExit();
-//             } else if (heroList != null && !heroList.isEmpty()) {
-//                 saveRosterOnly();
-//             }
-//             view.close();
-//         }
-//     }
-
-//     private void saveRosterOnly() {
-//         GameState state = new GameState();
-//         state.roster = heroList;
-//         state.sessions = new java.util.LinkedHashMap<>();
-//         repository.save(state);
-//         view.displayMessage("Your hero(es) have been saved.");
-//     }
-
-//     private void saveAndExit() {
-//         if (map == null) {
-//             // Nothing to save — we never got far enough to build a map.
-//             // Still flush the roster so any hero created during mainMenu survives.
-//             if (heroList != null && currentHero != null) {
-//                 GameState state = new GameState();
-//                 state.roster = heroList;
-//                 state.sessions = new java.util.LinkedHashMap<>();
-//                 repository.save(state);
-//                 view.displayMessage("Your hero(es) have been saved.");
-//             }
-//             return;
-//         }
-
-//         GameState state = new GameState();
-//         state.roster = heroList;
-//         state.sessions = new java.util.LinkedHashMap<>();
-//         state.sessions.put(
-//                 currentHero.getName(),
-//                 new Session(map.getSize(), map.getVillains()));
-
-//         repository.save(state);
-//         view.displayMessage("Your game has been saved.");
-//     }
-
-//     private int villainCountFor(int mapSize) {
-//         return Math.max(2, mapSize / 3);
-//     }
-
-//     private void gameLoop() {
-//         boolean running = true;
-//         while (running) {
-//             view.renderMap(map, currentHero);
-//             view.showHeroStats(currentHero);
-
-//             String input = view.askInput("Move (north/east/south/west) or 'exit': ").trim().toLowerCase();
-
-//             if ("exit".equals(input)) {
-//                 running = false;
-//                 continue;
-//             }
-
-//             Direction dir = Direction.fromString(input);   // returns null if invalid
-//             if (dir == null) {
-//                 view.displayError("Invalid direction: '" + input + "'");
-//                 continue;
-//             }
-
-//             handleMove(dir);
-
-//             // if (currentHero.getPosition() != null && map.isBorder(currentHero.getPosition())) {
-//             //     view.displayMessage("You reached the border — you win!");
-//             //     running = false;
-//             // }
-//         }
-//     }
-
-//     private int mapSizeFor(int level) {
-//         return (level - 1) * 5 + 10 - (level % 2);
-//     }
-
-//     private void handleMove(Direction dir) {
-//         Position current = currentHero.getPosition();
-//         Position next    = map.getNextPosition(current, dir);
-
-//         if (!map.isInside(next)) {
-//             view.displayError("You can't leave the map.");
-//             return;
-//         }
-
-//         // 1. Villain encounter — fight/run happens BEFORE the border win check,
-//         //    because a villain standing on the border must be cleared first.
-//         Villain villain = map.getVillainAt(next);
-//         if (villain != null) {
-//             EncounterResult result = handleEncounter(currentHero, villain);
-//             switch (result) {
-//                 case HERO_WON -> {
-//                     view.displayMessage("You defeated " + villain.getName() + "!");
-//                     map.removeVillain(villain);
-//                     currentHero.setPosition(next);
-//                     // Fall through to check if this winning move also reached the border.
-//                 }
-//                 case HERO_FLED -> {
-//                     view.displayMessage("You fled. The villain still blocks the path.");
-//                     return;
-//                 }
-//                 case HERO_LOST -> {
-//                     view.displayMessage("You were defeated. Game over.");
-//                     view.showLossDialog(currentHero, villain);
-//                     saveAndExit();
-//                     System.exit(0);
-//                     return;
-//                 }
-//             }
-//         } else {
-//             // No villain — move directly onto the tile.
-//             currentHero.setPosition(next);
-//         }
-
-//         // 2. Win check runs AFTER the hero is on the tile, whether it was
-//         //    empty or occupied by a defeated villain.
-//         if (map.isBorder(next)) {
-//             view.displayMessage("You reached the border — you win!");
-//             view.showWinDialog(currentHero);
-//             saveAndExit();
-//             System.exit(0);
-//         }
-//     }
-
-//     private Hero mainMenu() {
-//         view.displayMessage("Welcome to Swingy!");
-
-//         while (true) {
-//             String input;
-//             if (!heroList.isEmpty()) {
-//                 view.displayMessage("Available heroes:");
-//                 for (int i = 0; i < heroList.size(); i++) {
-//                     Hero h = heroList.get(i);
-//                     view.displayMessage("  " + (i + 1) + ". "
-//                             + h.getName() + " (Level " + h.getLevel() + ")");
-//                 }
-//                 input = view.askInput("Select a hero by number, or 0 to create a new one: ").trim();
-//             }
-//             else {
-//                 view.displayMessage("Please create a new hero: ");
-//                 return createNewHero();
-//             }
-
-//             int choice;
-//             try {
-//                 choice = Integer.parseInt(input);
-//             } catch (NumberFormatException e) {
-//                 view.displayError("Please enter a number.");
-//                 continue;
-//             }
-
-//             if (choice == 0) {
-//                 return createNewHero();
-//             }
-//             if (choice < 1 || choice > heroList.size()) {
-//                 view.displayError("No hero with number " + choice + ".");
-//                 continue;
-//             }
-//             return heroList.get(choice - 1);
-//         }
-//     }
-
-//     private String askHeroClass() {
-//         while (true) {
-//             view.displayMessage("Available hero classes:");
-//             for (HeroClass hc : HeroClass.values()) {
-//                 view.displayMessage("  - " + hc.name());
-//             }
-//             String className = view.askInput("Enter hero class: ").trim();
-//             HeroClass heroClass = HeroClass.fromString(className);
-//             if (heroClass != null) {
-//                 return className;
-//             }
-//             view.displayError("Unknown hero class: '" + className + "'");
-//         }
-//     }
-
-//     private boolean checkNameUnicity(String name) {
-//         for (Hero h : heroList) {
-//             if (h.getName().equalsIgnoreCase(name)) {
-//                 return false;
-//             }
-//         }
-//         return true;
-//     }
-
-//     private Hero createNewHero() {
-//         while (true) {
-//             String name = view.askInput("Enter hero name: ").trim();
-//             while (!checkNameUnicity(name)) {
-//                 view.displayMessage("Hero name already taken. Please choose another.");
-//                 name = view.askInput("Enter hero name: ").trim();
-//             }
-
-//             HeroClass heroClass = HeroClass.fromString(askHeroClass());
-//             Hero newHero = new Hero.HeroBuilder()
-//                     .name(name)
-//                     .heroClass(heroClass)
-//                     .build();
-
-//             if (!validator.isValid(newHero)) {
-//                 view.displayError(validator.validateAndCollect(newHero));
-//                 continue;
-//             }
-
-//             heroList.add(newHero);
-//             return newHero;
-//         }
-//     }
-
-//     private EncounterResult handleEncounter(Hero hero, Villain villain) {
-//         view.displayMessage(String.format(
-//             "A %s (power %d) blocks your path!", villain.getName(), villain.getAttack()));
-
-//         String choice = view.askInput("Fight or Run? [f/r]: ").trim().toLowerCase();
-//         if (choice.startsWith("r")) {
-//             if (random.nextBoolean()) {              // ← still uses `random`
-//                 return EncounterResult.HERO_FLED;
-//             }
-//             view.displayMessage("You failed to escape — you must fight!");
-//         }
-
-//         BattleReport report = battleSimulator.fight(hero, villain);
-
-//         // Narrate every exchange
-//         report.log().forEach(view::displayMessage);
-
-//         // Handle the drop, if any
-//         report.drop().ifPresent(artifact -> promptKeepArtifact(hero, artifact));
-
-//         return report.result();
-//     }
-
-//     private void promptKeepArtifact(Hero hero, Artifact artifact) {
-//         String keep = view.askInput("Keep it? [y/n]: ").trim().toLowerCase();
-//         if (!keep.startsWith("y")) {
-//             view.displayMessage("You leave it behind.");
-//             return;
-//         }
-//         if (hero.equipArtifact(artifact)) {
-//             view.displayMessage("Equipped " + artifact.getName() + ".");
-//         } else {
-//             view.displayMessage("Your class can't use that artifact. Discarded.");
-//         }
-//     }
-// }

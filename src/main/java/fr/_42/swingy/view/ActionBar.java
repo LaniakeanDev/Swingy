@@ -3,50 +3,63 @@ package fr._42.swingy.view;
 import javax.swing.*;
 import java.awt.*;
 import java.util.List;
+import java.util.function.Consumer;
 
-public class ActionBar extends JPanel {
+/**
+ * Two-row action bar:
+ *   - top row: primary commands (Create New Hero, Quit, ...)
+ *   - bottom row: contextual choices (hero selection, in-game actions)
+ * Each button click pushes its label into the command consumer.
+ */
+class ActionBar extends JPanel {
 
-    public interface Sink { void submit(String command); }
+    private final Consumer<String> onCommand;
+    private final JPanel primaryRow = new JPanel(new FlowLayout(FlowLayout.CENTER, 12, 6));
+    private final JPanel choiceRow  = new JPanel(new FlowLayout(FlowLayout.CENTER, 12, 6));
 
-    private final Sink sink;
-
-    public ActionBar(Sink sink) {
-        this.sink = sink;
-        setLayout(new FlowLayout(FlowLayout.CENTER, 10, 8));
+    ActionBar(Consumer<String> onCommand) {
+        this.onCommand = onCommand;
+        setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
         setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+
+        primaryRow.setOpaque(false);
+        choiceRow.setOpaque(false);
+
+        add(primaryRow);
+        add(Box.createVerticalStrut(4));
+        add(choiceRow);
     }
 
-    public void setActions(List<String> labels) {
-        removeAll();
-        setLayout(new FlowLayout(FlowLayout.CENTER, 10, 8));
+    void setPrimaryActions(List<String> labels) {
+        primaryRow.removeAll();
         for (String label : labels) {
-            add(makeButton(label));
+            primaryRow.add(makeButton(label, true));
         }
-        revalidate();
-        repaint();
+        primaryRow.revalidate();
+        primaryRow.repaint();
     }
 
-    /** One big button per hero, arranged in a grid so many fit on screen. */
-    public void setChoices(List<String> labels) {
-        removeAll();
-        int cols = Math.max(1, (int) Math.ceil(Math.sqrt(labels.size())));
-        setLayout(new GridLayout(0, cols, 10, 10));
+    void setChoices(List<String> labels) {
+        choiceRow.removeAll();
         for (String label : labels) {
-            JButton b = makeButton(label);
-            b.setFont(new Font("Monospaced", Font.BOLD, 18));
-            add(b);
+            choiceRow.add(makeButton(label, false));
         }
-        revalidate();
-        repaint();
+        choiceRow.revalidate();
+        choiceRow.repaint();
     }
 
-    private JButton makeButton(String label) {
+    private JButton makeButton(String label, boolean primary) {
         JButton b = new JButton(label);
-        b.setFont(new Font("Monospaced", Font.BOLD, 20));
-        b.setMargin(new Insets(8, 20, 8, 20));
-        b.setFocusable(false);
-        b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        b.addActionListener(e -> sink.submit(label));
+        b.setFont(new Font("SansSerif", primary ? Font.BOLD : Font.PLAIN, primary ? 16 : 15));
+        b.setMargin(new Insets(8, 18, 8, 18));
+        b.setFocusPainted(false);
+        if (primary) {
+            b.setBackground(new Color(60, 120, 200));
+            b.setForeground(Color.WHITE);
+            b.setOpaque(true);
+            b.setBorderPainted(false);
+        }
+        b.addActionListener(e -> onCommand.accept(label));
         return b;
     }
 }
