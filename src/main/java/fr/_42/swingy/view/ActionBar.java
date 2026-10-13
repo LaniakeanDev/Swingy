@@ -62,7 +62,20 @@ class ActionBar extends JPanel {
     }
 
     private JButton makeButton(String label, boolean primary) {
-        JButton b = new JButton(label);
+        String displayLabel = label;
+        if (label == "North") {
+            displayLabel = "↑";
+        }
+        else if (label == "South") {
+            displayLabel = "↓";
+        }
+        else if (label == "West") {
+            displayLabel = "←";
+        }
+        else if (label == "East") {
+            displayLabel = "→";
+        }
+        JButton b = new JButton(displayLabel);
         b.setFont(new Font("SansSerif", primary ? Font.BOLD : Font.PLAIN, primary ? 16 : 15));
         b.setMargin(new Insets(8, 18, 8, 18));
         b.setFocusPainted(true);

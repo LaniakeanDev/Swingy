@@ -12,7 +12,7 @@ import java.util.Map;
 /** Loads, caches and scales all sprite images to a fixed tile size. */
 public final class TileImages {
 
-    public static final int TILE_SIZE = 40;
+    public static final int TILE_SIZE = 32;
     private static final boolean DEBUG = true;
 
     private static final Map<String, BufferedImage> CACHE = new HashMap<>();

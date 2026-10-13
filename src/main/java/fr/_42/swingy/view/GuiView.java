@@ -58,9 +58,19 @@ public class GuiView implements View {
 
         frame.setContentPane(root);
         frame.setMinimumSize(new Dimension(1000, 700));
-        frame.setSize(1280, 860);
-        frame.setLocationRelativeTo(null);
+        frame.setPreferredSize(new Dimension(1280, 860));
+        frame.pack();
+        frame.setLocationByPlatform(true);
         frame.setVisible(true);
+        System.out.println("uiScale         = " + System.getProperty("sun.java2d.uiScale"));
+        System.out.println("uiScaleEnabled  = " + System.getProperty("sun.java2d.uiScale.enabled"));
+        System.out.println("screen (java)   = " + Toolkit.getDefaultToolkit().getScreenSize());
+        System.out.println("screen (GC)     = " + frame.getGraphicsConfiguration().getBounds());
+        System.out.println("frame (logical) = " + frame.getSize());
+        System.out.println("frame (physical)= " + frame.getSize());
+        GraphicsConfiguration gc = frame.getGraphicsConfiguration();
+        System.out.println("defaultTransform=" + gc.getDefaultTransform());
+        // System.out.println("normalizeTransform=" + gc.getNormalizeTransform());
 
         cards.show(root, CARD_MENU);
     }
@@ -109,7 +119,7 @@ public class GuiView implements View {
         center.add(side,      BorderLayout.EAST);
 
         // -- Log --
-        log = new JTextArea(8, 60);
+        log = new JTextArea(6, 60);
         log.setEditable(false);
         log.setFont(new Font("Monospaced", Font.PLAIN, 14));
         log.setMargin(new Insets(6, 6, 6, 6));

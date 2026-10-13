@@ -74,7 +74,7 @@ public final class Main {
 
         java.util.List<String> cmd = new java.util.ArrayList<>();
         cmd.add(System.getProperty("java.home") + "/bin/java");
-        cmd.add("-Dsun.java2d.uiScale=2");
+        cmd.add("-Dsun.java2d.uiScale=1");
         cmd.add("-Dswingy.relaunched=true");
         cmd.add("-cp");
         cmd.add(System.getProperty("java.class.path"));
@@ -100,9 +100,18 @@ public final class Main {
                 return new ConsoleView();
             case "gui":
                 if (GraphicsEnvironment.isHeadless()) {
-                    throw new IllegalArgumentException(
-                        "GUI mode requires a display — no X11/Wayland available. "
-                        + "Use 'console' mode, or run from a desktop session.");
+                    String msg = String.join("\n",
+                        "[swingy] Java reports headless; GUI cannot start.",
+                        "  DISPLAY          = " + System.getenv("DISPLAY"),
+                        "  WAYLAND_DISPLAY  = " + System.getenv("WAYLAND_DISPLAY"),
+                        "  XAUTHORITY       = " + System.getenv("XAUTHORITY"),
+                        "  java.awt.headless= " + System.getProperty("java.awt.headless"),
+                        "  JAVA_TOOL_OPTIONS= " + System.getenv("JAVA_TOOL_OPTIONS"),
+                        "  _JAVA_OPTIONS    = " + System.getenv("_JAVA_OPTIONS"),
+                        "",
+                        "If a display is present, try:",
+                        "  java -Djava.awt.headless=false -jar swingy.jar gui");
+                    throw new IllegalStateException(msg);
                 }
                 return new GuiView();
             default:

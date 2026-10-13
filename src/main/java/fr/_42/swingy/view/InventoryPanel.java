@@ -78,11 +78,7 @@ public class InventoryPanel extends JPanel {
             return;
         }
 
-        header.setText(String.format(
-                "Inventory — %s  (%s, Lvl %d)",
-                hero.getName(),
-                hero.getHeroClass().name(),
-                hero.getLevel()));
+        header.setText("Inventory");
 
         List<Artifact> artifacts = hero.getArtifacts();
         model.setArtifacts(artifacts == null ? List.of() : artifacts);
