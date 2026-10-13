@@ -551,7 +551,12 @@ class GameMapTest {
             m.generateVillains(10, 7);
 
             Set<String> strongNames = Set.of(
-                "Wyvern", "Lich", "Minotaur Lord", "Shadow Drake", "Demon Prince");
+                "Eccentric Mind",
+                "Emperor-Regent Nicosar",
+                "Idiran Special Ops",
+                "Interesting Times Gang",
+                "Excession"
+            );
 
             assertThat(m.getVillains())
                 .extracting(Villain::getName)

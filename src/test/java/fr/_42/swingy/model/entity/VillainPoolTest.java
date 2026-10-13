@@ -11,19 +11,39 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class VillainPoolTest {
 
+    /* ================================================================== */
+    /*  Tier name sets — mirror VillainPool exactly                        */
+    /* ================================================================== */
+
     private static final Set<String> WEAK_NAMES = Set.of(
-            "Giant Rat", "Goblin Scout", "Cave Bat", "Bandit", "Wild Boar");
+            "Affront Soldier",
+            "Querl Xoralundra",
+            "Fwi-Song",
+            "Mr. First",
+            "The Ethnarch"
+    );
 
     private static final Set<String> MID_NAMES = Set.of(
-            "Orc Warrior", "Skeleton Knight", "Dire Wolf", "Dark Cultist", "Troll");
+            "Bora Horza Gobuchul",
+            "Major Quilan",
+            "The Chairmaker",
+            "Chelgrian priest",
+            "Xoxarle"
+    );
 
     private static final Set<String> STRONG_NAMES = Set.of(
-            "Wyvern", "Lich", "Minotaur Lord", "Shadow Drake", "Demon Prince");
+            "Eccentric Mind",
+            "Emperor-Regent Nicosar",
+            "Idiran Special Ops",
+            "Interesting Times Gang",
+            "Excession"
+    );
 
     /* ================================================================== */
     /*  Catalog invariants                                                 */
@@ -35,6 +55,7 @@ class VillainPoolTest {
 
         @Test
         void allReturnsEveryTemplate() {
+            // 5 weak + 5 mid + 5 strong
             assertThat(VillainPool.all()).hasSize(15);
         }
 
@@ -87,6 +108,21 @@ class VillainPoolTest {
                     .max().orElseThrow();
 
             assertThat(weakestStrongAttack).isGreaterThan(strongestWeakAttack);
+        }
+
+        @Test
+        void tierNamesMatchThePoolContents() {
+            // Guards against the test and the pool drifting apart again.
+            Set<String> poolNames = VillainPool.all().stream()
+                    .map(VillainPool.VillainTemplate::getName)
+                    .collect(Collectors.toSet());
+
+            Set<String> expected = new HashSet<>();
+            expected.addAll(WEAK_NAMES);
+            expected.addAll(MID_NAMES);
+            expected.addAll(STRONG_NAMES);
+
+            assertThat(poolNames).isEqualTo(expected);
         }
     }
 
@@ -174,14 +210,33 @@ class VillainPoolTest {
         }
 
         @Test
-        void everyTemplateInTierIsReachable() {
-            // Roll many times and confirm we eventually see all 5 names.
+        void everyWeakTemplateIsReachable() {
             Set<String> seen = new HashSet<>();
             Random rng = new Random(0);
             for (int i = 0; i < 500; i++) {
                 seen.add(VillainPool.rollForHeroLevel(rng, 1, new Position(0, 0)).getName());
             }
             assertThat(seen).isEqualTo(WEAK_NAMES);
+        }
+
+        @Test
+        void everyMidTemplateIsReachable() {
+            Set<String> seen = new HashSet<>();
+            Random rng = new Random(0);
+            for (int i = 0; i < 500; i++) {
+                seen.add(VillainPool.rollForHeroLevel(rng, 5, new Position(0, 0)).getName());
+            }
+            assertThat(seen).isEqualTo(MID_NAMES);
+        }
+
+        @Test
+        void everyStrongTemplateIsReachable() {
+            Set<String> seen = new HashSet<>();
+            Random rng = new Random(0);
+            for (int i = 0; i < 500; i++) {
+                seen.add(VillainPool.rollForHeroLevel(rng, 10, new Position(0, 0)).getName());
+            }
+            assertThat(seen).isEqualTo(STRONG_NAMES);
         }
 
         @Test

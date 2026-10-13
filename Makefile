@@ -17,13 +17,13 @@ MAVEN_NAME    := apache-maven-$(MAVEN_VERSION)
 MAVEN_URL     := https://archive.apache.org/dist/maven/maven-3/$(MAVEN_VERSION)/binaries/$(MAVEN_NAME)-bin.tar.gz
 MAVEN_TARBALL := tools/$(MAVEN_NAME)-bin.tar.gz
 
-# Temurin JDK 21 — full JDK, includes libawt_xawt.so (headful AWT).
+# Temurin JDK 17 — full JDK, includes libawt_xawt.so (headful AWT).
 # Override on the command line if you want a different version or arch:
-#   make JDK_VERSION=21.0.2+13 JDK_ARCH=linux
-JDK_VERSION   := 21.0.2+13
+#   make JDK_VERSION=17.0.2+8 JDK_ARCH=linux
+JDK_VERSION   := 17.0.2+8
 JDK_ARCH      := linux
-JDK_NAME      := OpenJDK21U-jdk_x64_$(JDK_ARCH)_hotspot_$(subst +,_,$(JDK_VERSION))
-JDK_URL       := https://github.com/adoptium/temurin21-binaries/releases/download/jdk-$(subst +,%2B,$(JDK_VERSION))/$(JDK_NAME).tar.gz
+JDK_NAME      := OpenJDK17U-jdk_x64_$(JDK_ARCH)_hotspot_$(subst +,_,$(JDK_VERSION))
+JDK_URL       := https://github.com/adoptium/temurin17-binaries/releases/download/jdk-$(subst +,%2B,$(JDK_VERSION))/$(JDK_NAME).tar.gz
 JDK_TARBALL   := tools/$(JDK_NAME).tar.gz
 
 # ---- Directories -----------------------------------------------------

@@ -21,30 +21,30 @@ public final class ArtifactPool {
 
     /** Weak tier — drops from low-power villains (power 1–3). */
     private static final List<Artifact> WEAK = List.of(
-        new Artifact(ArtifactType.WEAPON, 2,  "Rusty Dagger"),
-        new Artifact(ArtifactType.ARMOR,  2,  "Wooden Shield"),
-        new Artifact(ArtifactType.HELM,   3,  "Leather Cap"),
-        new Artifact(ArtifactType.WEAPON, 3,  "Cracked Wand"),
-        new Artifact(ArtifactType.ARMOR,  3,  "Torn Cloak")
+        new Artifact(ArtifactType.WEAPON, 2,  "Knife missile"),
+        new Artifact(ArtifactType.ARMOR,  2,  "Combat Sarcophagus"),
+        new Artifact(ArtifactType.HELM,   3,  "Cortex Cowl"),
+        new Artifact(ArtifactType.WEAPON, 3,  "CREWS"),
+        new Artifact(ArtifactType.ARMOR,  3,  "Ghost Cloak")
     );
 
     /** Mid tier — drops from mid-power villains (power 4–7). */
     private static final List<Artifact> MID = List.of(
-        new Artifact(ArtifactType.WEAPON, 6,  "Steel Sword"),
-        new Artifact(ArtifactType.ARMOR,  5,  "Chainmail Vest"),
-        new Artifact(ArtifactType.HELM,   6,  "Iron Helm"),
-        new Artifact(ArtifactType.WEAPON, 5,  "Oak Staff"),
-        new Artifact(ArtifactType.ARMOR,  6,  "Studded Boots")
+        new Artifact(ArtifactType.WEAPON, 6,  "Monofilament Warp"),
+        new Artifact(ArtifactType.ARMOR,  5,  "Gelfield Suit"),
+        new Artifact(ArtifactType.HELM,   6,  "MindHalo"),
+        new Artifact(ArtifactType.WEAPON, 5,  "Gridfire"),
+        new Artifact(ArtifactType.ARMOR,  6,  "Displacer")
     );
 
     /** Strong tier — drops from high-power villains (power 8+). */
     private static final List<Artifact> STRONG = List.of(
-        new Artifact(ArtifactType.WEAPON, 12, "Runeblade"),
+        new Artifact(ArtifactType.WEAPON, 12, "Effector"),
         new Artifact(ArtifactType.ARMOR,  11, "Dragonscale"),
-        new Artifact(ArtifactType.HELM,   14, "Crown of Ages"),
-        new Artifact(ArtifactType.WEAPON, 13, "Void Scepter"),
-        new Artifact(ArtifactType.ARMOR,  12, "Aegis of Dawn"),
-        new Artifact(ArtifactType.HELM,   13, "Helm of Kings")
+        new Artifact(ArtifactType.HELM,   14, "Youth Therapy"),
+        new Artifact(ArtifactType.WEAPON, 13, "Nanohole Bomb"),
+        new Artifact(ArtifactType.ARMOR,  12, "Mind Protection"),
+        new Artifact(ArtifactType.HELM,   13, "Idiran Helmet")
     );
 
     /**

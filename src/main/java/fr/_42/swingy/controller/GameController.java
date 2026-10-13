@@ -168,6 +168,7 @@ public class GameController {
             // Only flush the roster here; per-session saves happen inline.
             if (heroList != null && !heroList.isEmpty()) {
                 saveRosterOnly();
+                System.out.println("Your hero(es) have been saved on exit.");
             }
             view.close();
         }

@@ -25,29 +25,29 @@ public final class VillainPool {
 
     /** Weak tier — appropriate for heroes of level 1–3. */
     private static final List<VillainTemplate> WEAK = List.of(
-        new VillainTemplate("Giant Rat",        20,  3,  1),
-        new VillainTemplate("Goblin Scout",     30,  5,  2),
-        new VillainTemplate("Cave Bat",         18,  4,  1),
-        new VillainTemplate("Bandit",           35,  6,  3),
-        new VillainTemplate("Wild Boar",        40,  5,  2)
+        new VillainTemplate("Affront Soldier",        20,  3,  1),
+        new VillainTemplate("Querl Xoralundra",     30,  5,  2),
+        new VillainTemplate("Fwi-Song",         18,  4,  1),
+        new VillainTemplate("Mr. First",           35,  6,  3),
+        new VillainTemplate("The Ethnarch",        40,  5,  2)
     );
 
     /** Mid tier — appropriate for heroes of level 4–6. */
     private static final List<VillainTemplate> MID = List.of(
-        new VillainTemplate("Orc Warrior",      70, 10,  5),
-        new VillainTemplate("Skeleton Knight",  65, 12,  6),
-        new VillainTemplate("Dire Wolf",        80, 11,  4),
-        new VillainTemplate("Dark Cultist",     60, 13,  5),
-        new VillainTemplate("Troll",            95,  9,  7)
+        new VillainTemplate("Bora Horza Gobuchul",      70, 10,  5),
+        new VillainTemplate("Major Quilan",  65, 12,  6),
+        new VillainTemplate("The Chairmaker",        80, 11,  4),
+        new VillainTemplate("Chelgrian priest",     60, 13,  5),
+        new VillainTemplate("Xoxarle",            95,  9,  7)
     );
 
     /** Strong tier — appropriate for heroes of level 7+. */
     private static final List<VillainTemplate> STRONG = List.of(
-        new VillainTemplate("Wyvern",          140, 18, 10),
-        new VillainTemplate("Lich",            130, 20,  9),
-        new VillainTemplate("Minotaur Lord",   160, 17, 12),
-        new VillainTemplate("Shadow Drake",    150, 19, 11),
-        new VillainTemplate("Demon Prince",    180, 22, 13)
+        new VillainTemplate("Eccentric Mind",          140, 18, 10),
+        new VillainTemplate("Emperor-Regent Nicosar",            130, 20,  9),
+        new VillainTemplate("Idiran Special Ops",   160, 17, 12),
+        new VillainTemplate("Interesting Times Gang",    150, 19, 11),
+        new VillainTemplate("Excession",    180, 22, 13)
     );
 
     /* ------------------------------------------------------------------ */

@@ -13,7 +13,6 @@ import java.util.Map;
 public final class TileImages {
 
     public static final int TILE_SIZE = 32;
-    private static final boolean DEBUG = true;
 
     private static final Map<String, BufferedImage> CACHE = new HashMap<>();
 
@@ -34,13 +33,10 @@ public final class TileImages {
         if (src == null) src = readFile(path);
 
         if (src == null) {
-            if (DEBUG) System.err.println("[TileImages] NOT FOUND: " + path
+            System.err.println("WARNING: [TileImages] NOT FOUND: " + path
                     + " — using placeholder '" + letter + "'");
             return placeholder(fallback, letter);
         }
-        if (DEBUG) System.out.println("[TileImages] loaded " + path
-                + " (" + src.getWidth() + "x" + src.getHeight() + ")");
-
         BufferedImage scaled = new BufferedImage(
                 TILE_SIZE, TILE_SIZE, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = scaled.createGraphics();

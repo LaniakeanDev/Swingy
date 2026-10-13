@@ -45,7 +45,7 @@ public class GuiView implements View {
     // ---------------------------------------------------------------
 
     private void buildUi() {
-        frame = new JFrame("Swingy");
+        frame = new JFrame("Culture Swing");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
         cards = new CardLayout();
@@ -62,15 +62,6 @@ public class GuiView implements View {
         frame.pack();
         frame.setLocationByPlatform(true);
         frame.setVisible(true);
-        System.out.println("uiScale         = " + System.getProperty("sun.java2d.uiScale"));
-        System.out.println("uiScaleEnabled  = " + System.getProperty("sun.java2d.uiScale.enabled"));
-        System.out.println("screen (java)   = " + Toolkit.getDefaultToolkit().getScreenSize());
-        System.out.println("screen (GC)     = " + frame.getGraphicsConfiguration().getBounds());
-        System.out.println("frame (logical) = " + frame.getSize());
-        System.out.println("frame (physical)= " + frame.getSize());
-        GraphicsConfiguration gc = frame.getGraphicsConfiguration();
-        System.out.println("defaultTransform=" + gc.getDefaultTransform());
-        // System.out.println("normalizeTransform=" + gc.getNormalizeTransform());
 
         cards.show(root, CARD_MENU);
     }
@@ -79,7 +70,7 @@ public class GuiView implements View {
         JPanel wrapper = new JPanel(new BorderLayout());
         wrapper.setBackground(new Color(30, 30, 40));
 
-        JLabel title = new JLabel("SWINGY", SwingConstants.CENTER);
+        JLabel title = new JLabel("Culture Swing", SwingConstants.CENTER);
         title.setFont(new Font("Serif", Font.BOLD, 72));
         title.setForeground(new Color(230, 200, 100));
         title.setBorder(BorderFactory.createEmptyBorder(60, 0, 40, 0));

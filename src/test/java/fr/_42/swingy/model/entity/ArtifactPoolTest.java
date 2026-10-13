@@ -11,10 +11,40 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ArtifactPoolTest {
+
+    /* ================================================================== */
+    /*  Tier name sets — mirror ArtifactPool exactly                       */
+    /* ================================================================== */
+
+    private static final Set<String> WEAK_NAMES = Set.of(
+            "Knife missile",
+            "Combat Sarcophagus",
+            "Cortex Cowl",
+            "CREWS",
+            "Ghost Cloak"
+    );
+
+    private static final Set<String> MID_NAMES = Set.of(
+            "Monofilament Warp",
+            "Gelfield Suit",
+            "MindHalo",
+            "Gridfire",
+            "Displacer"
+    );
+
+    private static final Set<String> STRONG_NAMES = Set.of(
+            "Effector",
+            "Dragonscale",
+            "Youth Therapy",
+            "Nanohole Bomb",
+            "Mind Protection",
+            "Idiran Helmet"
+    );
 
     /* ================================================================== */
     /*  Catalog invariants                                                 */
@@ -26,7 +56,8 @@ class ArtifactPoolTest {
 
         @Test
         void allReturnsEveryArtifact() {
-            assertThat(ArtifactPool.all()).hasSize(16);   // 5 weak + 5 mid + 6 strong
+            // 5 weak + 5 mid + 6 strong
+            assertThat(ArtifactPool.all()).hasSize(16);
         }
 
         @Test
@@ -46,7 +77,7 @@ class ArtifactPoolTest {
         void everyArtifactTypeIsRepresented() {
             Set<ArtifactType> types = ArtifactPool.all().stream()
                     .map(Artifact::getType)
-                    .collect(java.util.stream.Collectors.toSet());
+                    .collect(Collectors.toSet());
             assertThat(types).containsExactlyInAnyOrder(ArtifactType.values());
         }
 
@@ -69,21 +100,29 @@ class ArtifactPoolTest {
         void strongTierIsStrictlyStrongerThanWeakTier() {
             // Weakest strong artifact vs strongest weak artifact.
             // A regression here means the tier boundaries don't reflect power.
-            Set<String> weak = Set.of(
-                    "Rusty Dagger", "Wooden Shield", "Leather Cap",
-                    "Cracked Wand", "Torn Cloak");
-            Set<String> strong = Set.of(
-                    "Runeblade", "Dragonscale", "Crown of Ages",
-                    "Void Scepter", "Aegis of Dawn", "Helm of Kings");
-
             int weakestStrongValue = ArtifactPool.all().stream()
-                    .filter(a -> strong.contains(a.getName()))
+                    .filter(a -> STRONG_NAMES.contains(a.getName()))
                     .mapToInt(Artifact::getValue).min().orElseThrow();
             int strongestWeakValue = ArtifactPool.all().stream()
-                    .filter(a -> weak.contains(a.getName()))
+                    .filter(a -> WEAK_NAMES.contains(a.getName()))
                     .mapToInt(Artifact::getValue).max().orElseThrow();
 
             assertThat(weakestStrongValue).isGreaterThan(strongestWeakValue);
+        }
+
+        @Test
+        void tierNamesMatchThePoolContents() {
+            // Guards against the test and the pool drifting apart again.
+            Set<String> poolNames = ArtifactPool.all().stream()
+                    .map(Artifact::getName)
+                    .collect(Collectors.toSet());
+
+            Set<String> expected = new HashSet<>();
+            expected.addAll(WEAK_NAMES);
+            expected.addAll(MID_NAMES);
+            expected.addAll(STRONG_NAMES);
+
+            assertThat(poolNames).isEqualTo(expected);
         }
     }
 
@@ -94,16 +133,6 @@ class ArtifactPoolTest {
     @Nested
     @DisplayName("rollForPower")
     class RollForPower {
-
-        private static final Set<String> WEAK_NAMES = Set.of(
-                "Rusty Dagger", "Wooden Shield", "Leather Cap",
-                "Cracked Wand", "Torn Cloak");
-        private static final Set<String> MID_NAMES = Set.of(
-                "Steel Sword", "Chainmail Vest", "Iron Helm",
-                "Oak Staff", "Studded Boots");
-        private static final Set<String> STRONG_NAMES = Set.of(
-                "Runeblade", "Dragonscale", "Crown of Ages",
-                "Void Scepter", "Aegis of Dawn", "Helm of Kings");
 
         @ParameterizedTest(name = "villain power {0} -> WEAK")
         @ValueSource(ints = {1, 2, 3})
@@ -166,6 +195,26 @@ class ArtifactPoolTest {
                 seen.add(ArtifactPool.rollForPower(rng, 1).getName());
             }
             assertThat(seen).isEqualTo(WEAK_NAMES);
+        }
+
+        @Test
+        void everyMidTemplateIsReachable() {
+            Set<String> seen = new HashSet<>();
+            Random rng = new Random(0);
+            for (int i = 0; i < 500; i++) {
+                seen.add(ArtifactPool.rollForPower(rng, 5).getName());
+            }
+            assertThat(seen).isEqualTo(MID_NAMES);
+        }
+
+        @Test
+        void everyStrongTemplateIsReachable() {
+            Set<String> seen = new HashSet<>();
+            Random rng = new Random(0);
+            for (int i = 0; i < 500; i++) {
+                seen.add(ArtifactPool.rollForPower(rng, 10).getName());
+            }
+            assertThat(seen).isEqualTo(STRONG_NAMES);
         }
 
         @Test
