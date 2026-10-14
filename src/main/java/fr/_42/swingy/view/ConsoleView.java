@@ -117,6 +117,16 @@ public class ConsoleView implements View {
             hero.getCurrentHitPoints(), hero.getHitPoints());
         System.out.printf("  Artifacts  : %d%n", hero.getArtifacts().size());
         System.out.println(BLUE + "╰──────────────────────────╯" + RESET);
+        StringBuilder sb = new StringBuilder();
+        for (var a : hero.getArtifacts()) {
+            if (sb.length() > 0) {
+                sb.append("\n");
+            }
+            sb.append("    " + a.getName() + " (" + a.getType().name() + ") +").append(a.getValue());
+        }
+        if (sb.length() > 0) {
+            System.out.println("  Equipped artifacts:\n" + sb);
+        }
     }
 
     @Override
