@@ -17,8 +17,8 @@ import javax.validation.ValidatorFactory;
  * Entry point for the Swingy text-based RPG.
  *
  * Usage:
- *   java -jar swingy.jar console
- *   java -jar swingy.jar gui
+ *   java -jar target/swingy.jar console
+ *   java -jar target/swingy.jar gui
  */
 public final class Main {
 

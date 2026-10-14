@@ -27,7 +27,7 @@ public class GameController {
     // Constants
     // ---------------------------------------------------------------
 
-    private static final String NEW_HERO_CHOICE = "+ Create new hero";
+    private static final String NEW_HERO_CHOICE = "Create new hero";
     private static final String QUIT_CHOICE     = "Quit";
     private static final String QUIT_TO_MENU    = "Quit to Menu";
 
@@ -83,8 +83,9 @@ public class GameController {
         if (view instanceof GuiView gv) gv.setMenuPrimaryActions(labels);
     }
 
-    private void showMenuChoices(List<String> labels) {
+    private void showMenuChoices(List<String> labels, List<Hero> heroList) {
         if (view instanceof GuiView gv) gv.setMenuChoices(labels);
+        else view.displayHeroList(heroList);
     }
 
     private void showGamePrimaryActions(List<String> labels) {
@@ -205,7 +206,7 @@ public class GameController {
             persistedState.sessions = new java.util.LinkedHashMap<>();
         }
         repository.save(persistedState);
-        view.displayMessage("Your hero(es) have been saved.");
+        // view.displayMessage("Your hero(es) have been saved.");
     }
 
     private void saveAndExit() {
@@ -250,7 +251,7 @@ public class GameController {
             view.renderMap(map, currentHero);
             view.showHeroStats(currentHero);
             showGameChoices(moveChoices);
-            String input = prompt("Choose an action");
+            String input = prompt("Choose an action (north, east, south, west or \"quit to menu\")");
 
             if (QUIT_TO_MENU.equalsIgnoreCase(input)) {
                 view.displayMessage("Saving and returning to menu…");
@@ -373,9 +374,9 @@ public class GameController {
             for (Hero h : heroList) {
                 heroLabels.add(h.getName() + "  (Lvl " + h.getLevel() + ")");
             }
-            showMenuChoices(heroLabels);
+            showMenuChoices(heroLabels, heroList);
 
-            String choice = prompt("Choose a hero");
+            String choice = prompt("Choose a hero (or \"" + NEW_HERO_CHOICE + "\" or \"quit\")");
 
             if (NEW_HERO_CHOICE.equalsIgnoreCase(choice)) {
                 Hero created = createNewHero();
@@ -420,7 +421,7 @@ public class GameController {
 
         while (true) {
             showMenuPrimaryActions(labels);
-            String choice = prompt("Choose a hero class");
+            String choice = prompt("Choose a hero class\n(available classes: " + HeroClass.values()[0].displayList() + ")\n");
 
             HeroClass heroClass = HeroClass.fromString(choice);
             if (heroClass != null) {

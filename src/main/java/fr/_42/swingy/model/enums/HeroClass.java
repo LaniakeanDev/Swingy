@@ -48,6 +48,17 @@ public enum HeroClass {
         return sb.toString();
     }
 
+    public String displayList() {
+        StringBuilder sb = new StringBuilder();
+        for (HeroClass hc : values()) {
+            if (sb.length() > 0) {
+                sb.append(", ");
+            }
+            sb.append(hc.displayName());
+        }
+        return sb.toString();
+    }
+
     public static HeroClass fromString(String s) {
         if (s == null) return null;
         for (HeroClass hc : values()) {
